@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система мониторинга и управления ШЛЮЗОМ №6</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 2.5em;
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .control-group {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .control-group h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #34495e;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 4px;
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ccc;
+            transition: background 0.3s;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .status-indicator.green {
+            background: #27ae60;
+        }
+        .status-indicator.red {
+            background: #e74c3c;
+        }
+        .water-flow {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .water-flow h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #34495e;
+        }
+        .water-flow p {
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+        .water-flow button {
+            background-color: #2ecc71;
+        }
+        .water-flow button:hover {
+            background-color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <h1>Система мониторинга и управления ШЛЮЗОМ №6</h1>
+    <div class="container">
+        <!-- Защита нижний бьеф -->
+        <div class="control-group">
+            <h2>Защита нижний бьеф</h2>
+            <button onclick="updateState('motorA1A2', 'up')">Вверх</button>
+            <button onclick="updateState('motorA1A2', 'down')">Вниз</button>
+            <button onclick="updateState('motorA1A2', 'stop')">Стоп</button>
+            <div id="motorA1A2-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Защита верхний бьеф -->
+        <div class="control-group">
+            <h2>Защита верхний бьеф</h2>
+            <button onclick="updateState('motor8_11', 'up')">Вверх</button>
+            <button onclick="updateState('motor8_11', 'down')">Вниз</button>
+            <button onclick="updateState('motor8_11', 'stop')">Стоп</button>
+            <div id="motor8_11-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Ворота верхний бьеф -->
+        <div class="control-group">
+            <h2>Ворота верхний бьеф</h2>
+            <button onclick="updateState('servo2_3', 'open')">Открыть</button>
+            <button onclick="updateState('servo2_3', 'close')">Закрыть</button>
+            <div id="servo2_3-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Ворота нижний бьеф -->
+        <div class="control-group">
+            <h2>Ворота нижний бьеф</h2>
+            <button onclick="updateState('servo4_5', 'open')">Открыть</button>
+            <button onclick="updateState('servo4_5', 'close')">Закрыть</button>
+            <div id="servo4_5-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Светофор верхний бьеф -->
+        <div class="control-group">
+            <h2>Светофор верхний бьеф</h2>
+            <button onclick="updateState('led1', 'on')">Включить</button>
+            <button onclick="updateState('led1', 'off')">Выключить</button>
+            <div id="led1-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Светофор шлюз -->
+        <div class="control-group">
+            <h2>Светофор шлюз</h2>
+            <button onclick="updateState('led2', 'on')">Включить</button>
+            <button onclick="updateState('led2', 'off')">Выключить</button>
+            <div id="led2-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Управление насосами -->
+        <div class="control-group">
+            <h2>Управление насосами</h2>
+            <button onclick="updateState('relay1', 'toggle')">1 - клапан верхний бьеф</button>
+            <div id="relay1-indicator" class="status-indicator"></div>
+            <button onclick="updateState('relay2', 'toggle')">2 - помпа шлюз</button>
+            <div id="relay2-indicator" class="status-indicator"></div>
+            <button onclick="updateState('relay3', 'toggle')">3 - клапан шлюз</button>
+            <div id="relay3-indicator" class="status-indicator"></div>
+            <button onclick="updateState('relay4', 'toggle')">4 - помпа верхний бьеф</button>
+            <div id="relay4-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Управление подачей воды -->
+        <div class="control-group">
+            <h2>Управление подачей воды</h2>
+            <button onclick="updateState('relaych4', 'toggle')">Насосная система</button>
+            <div id="relaych4-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Счетчик расхода воды -->
+        <div class="water-flow">
+            <h2>Расход воды</h2>
+            <p>Общий расход: <span id="total-water">0.00</span> литров</p>
+            <p>Скорость потока: <span id="flow-rate">0.00</span> литров/мин</p>
+            <button onclick="resetWaterCounter()">Сбросить счетчик</button>
+        </div>
+    </div>
+
+    <script>
+        // Функция для обновления индикаторов
+        function updateIndicators(states) {
+            // Моторы
+            document.getElementById('motorA1A2-indicator').className =
+                `status-indicator ${states.motorA1A2 === 'up' ? 'green' : states.motorA1A2 === 'down' ? 'green' : 'red'}`;
+            document.getElementById('motor8_11-indicator').className =
+                `status-indicator ${states.motor8_11 === 'up' ? 'green' : states.motor8_11 === 'down' ? 'green' : 'red'}`;
+
+            // Сервоприводы
+            document.getElementById('servo2_3-indicator').className =
+                `status-indicator ${states.servo2_3 === 'open' ? 'green' : 'red'}`;
+            document.getElementById('servo4_5-indicator').className =
+                `status-indicator ${states.servo4_5 === 'open' ? 'green' : 'red'}`;
+
+            // Светодиоды
+            document.getElementById('led1-indicator').className =
+                `status-indicator ${states.led1 === 'on' ? 'green' : 'red'}`;
+            document.getElementById('led2-indicator').className =
+                `status-indicator ${states.led2 === 'on' ? 'green' : 'red'}`;
+
+            // Управление насосами
+            document.getElementById('relay1-indicator').className =
+                `status-indicator ${states.relay1 === 'on' ? 'green' : 'red'}`;
+            document.getElementById('relay2-indicator').className =
+                `status-indicator ${states.relay2 === 'on' ? 'green' : 'red'}`;
+            document.getElementById('relay3-indicator').className =
+                `status-indicator ${states.relay3 === 'on' ? 'green' : 'red'}`;
+            document.getElementById('relay4-indicator').className =
+                `status-indicator ${states.relay4 === 'on' ? 'green' : 'red'}`;
+
+            // Управление подачей воды
+            document.getElementById('relaych4-indicator').className =
+                `status-indicator ${states.relaych4 === 'on' ? 'green' : 'red'}`;
+        }
+
+        // Функция для обновления данных о расходе воды
+        function updateWaterFlow(data) {
+            document.getElementById('total-water').textContent = data.total_water.toFixed(2);
+            document.getElementById('flow-rate').textContent = data.flow_rate.toFixed(2);
+        }
+
+        // Функция для сброса счетчика воды
+        function resetWaterCounter() {
+            fetch('/reset_water_counter', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    updateWaterFlow(data);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Загрузка начальных состояний
+        fetch('/get_states')
+            .then(response => response.json())
+            .then(states => updateIndicators(states))
+            .catch(error => console.error('Error:', error));
+
+        // Загрузка начальных данных о расходе воды
+        fetch('/get_water_flow')
+            .then(response => response.json())
+            .then(data => updateWaterFlow(data))
+            .catch(error => console.error('Error:', error));
+
+        // Функция для отправки команд
+        function updateState(device, state) {
+            fetch('/update_state', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ device, state }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Обновляем индикаторы после успешного запроса
+                fetch('/get_states')
+                    .then(response => response.json())
+                    .then(states => updateIndicators(states));
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Периодическое обновление данных о расходе воды
+        setInterval(() => {
+            fetch('/get_water_flow')
+                .then(response => response.json())
+                .then(data => updateWaterFlow(data))
+                .catch(error => console.error('Error:', error));
+        }, 1000); // Обновление каждую секунду
+    </script>
+</body>
+</html>
