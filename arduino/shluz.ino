@@ -26,6 +26,12 @@ int motor3Pin2 = A2;
 int motor4Pin1 = A3;
 int motor4Pin2 = A4;
 
+// Датчики уровня воды
+const uint8_t pinSensorEmpty = 41; // Пин для датчика "Пустой шлюз"
+const uint8_t pinSensorFull = 42;  // Пин для датчика "Полный шлюз"
+bool waterLevelEmpty = false;      // Состояние уровня воды "Пустой шлюз"
+bool waterLevelFull = false;       // Состояние уровня воды "Полный шлюз"
+
 // Датчик расхода воды
 int flowSensorPin = A0;
 volatile long pulseCount = 0;
@@ -126,22 +132,21 @@ void controlLEDs(bool led1On, bool led2On) {
 }
 
 // Функция для управления моторами через L298N
-void controlL298N(int speed1, int speed2) {
-  // Управление направлением и скоростью мотора 1
-  speed1 = map(speed1, 0, 100, 0, 255);
-  if (speed1 > 0) {
+void controlL298N(bool motor1On, bool motor2On) {
+  // Управление мотором 1
+  if (motor1On) {
     digitalWrite(motor1PinA, HIGH);
     digitalWrite(motor1PinB, LOW);
-    analogWrite(motor1EnablePin, speed1);
+    analogWrite(motor1EnablePin, 255); // Полная скорость
   } else {
     digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
   }
-  speed2 = map(speed2, 0, 100, 0, 255);
-  // Управление направлением и скоростью мотора 2
-  if (speed2 > 0) {
+
+  // Управление мотором 2
+  if (motor2On) {
     digitalWrite(motor2PinA, HIGH);
     digitalWrite(motor2PinB, LOW);
-    analogWrite(motor2EnablePin, speed2);
+    analogWrite(motor2EnablePin, 255); // Полная скорость
   } else {
     digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
   }
@@ -207,6 +212,10 @@ void setup() {
   // Инициализация помпы
   pinMode(pumpPin, OUTPUT);
 
+  // Инициализация датчиков уровня воды
+  pinMode(pinSensorEmpty, INPUT_PULLUP);
+  pinMode(pinSensorFull, INPUT_PULLUP);
+
   // Инициализация датчика расхода воды
   pinMode(flowSensorPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
@@ -217,21 +226,27 @@ void setup() {
 }
 
 void loop() {
+  // Обработка сигналов с датчиков уровня воды
+  waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
+  waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
+
   // Обработка команд от Serial
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
     Serial.println("Received command: " + command);  // Отладочное сообщение
 
-    // Вывод команды на TFT-дисплей
-    displayText("Command: " + command);
-
-    // Обработка команды запроса данных
+    // Обработка команды запроса данных о расходе воды
     if (command == "GET_WATER_DATA") {
-      // Отправляем данные сразу при получении запроса
       String data = String(totalWater) + "," + String(flowRate);
       Serial.println(data);
     }
+    // Обработка команды запроса данных о уровне воды
+    else if (command == "GET_WATER_LEVEL") {
+      String data = String(waterLevelEmpty ? "high" : "low") + "," + String(waterLevelFull ? "high" : "low");
+      Serial.println(data);
+    }
+
     // Управление моторами A1,A2 и A3,A4
     else if (command == "MOTORA1A2_UP") {
       motorA1A2State = 1;
@@ -290,12 +305,18 @@ void loop() {
     }
 
     // Обработка команд для управления моторами
-    else if (command.startsWith("MOTOR1_SPEED:")) {
-      motor1Speed = command.substring(13).toInt();
-      Serial.println("MOTOR1 SPEED: " + String(motor1Speed));
-    } else if (command.startsWith("MOTOR2_SPEED:")) {
-      motor2Speed = command.substring(13).toInt();
-      Serial.println("MOTOR2 SPEED: " + String(motor2Speed));
+    else if (command == "MOTOR1_ON") {
+      motor1Speed = 255; // Включить мотор 1
+      Serial.println("MOTOR1: ON");
+    } else if (command == "MOTOR1_OFF") {
+      motor1Speed = 0; // Выключить мотор 1
+      Serial.println("MOTOR1: OFF");
+    } else if (command == "MOTOR2_ON") {
+      motor2Speed = 255; // Включить мотор 2
+      Serial.println("MOTOR2: ON");
+    } else if (command == "MOTOR2_OFF") {
+      motor2Speed = 0; // Выключить мотор 2
+      Serial.println("MOTOR2: OFF");
     }
 
     // Управление помпой
@@ -315,7 +336,24 @@ void loop() {
   controlPump(pumpState);
 
   // Управление моторами
-  controlL298N(motor1Speed, motor2Speed);
+  controlL298N(motor1Speed > 0, motor2Speed > 0);
+
+  // Обработка сигналов с датчиков уровня воды
+  waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
+  waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
+
+  // Отправка состояния уровня воды в Serial
+  if (waterLevelEmpty) {
+    Serial.println("WATER_LEVEL_EMPTY:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_EMPTY:LOW");
+  }
+
+  if (waterLevelFull) {
+    Serial.println("WATER_LEVEL_FULL:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_FULL:LOW");
+  }
 
   // Обновление данных датчика каждую секунду
   static unsigned long lastMeasurement = 0;

@@ -307,31 +307,31 @@
             .then(states => updateIndicators(states))
             .catch(error => console.error('Error:', error));
 
-        // Функция для обновления индикаторов уровня воды
-        function updateWaterLevelIndicators(emptyLevel, fullLevel) {
-            const emptyIndicator = document.getElementById('water-level-empty-indicator');
-            const fullIndicator = document.getElementById('water-level-full-indicator');
+    // Функция для обновления индикаторов уровня воды
+    function updateWaterLevelIndicators(emptyLevel, fullLevel) {
+        const emptyIndicator = document.getElementById('water-level-empty-indicator');
+        const fullIndicator = document.getElementById('water-level-full-indicator');
 
-            emptyIndicator.className = emptyLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
-            fullIndicator.className = fullLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
-        }
+        emptyIndicator.className = emptyLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
+        fullIndicator.className = fullLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
+    }
 
-        // Периодическое обновление данных о расходе воды и уровне воды
-        setInterval(() => {
-            fetch('/get_water_flow')
-                .then(response => response.json())
-                .then(data => {
-                    updateWaterFlow(data);
-                })
-                .catch(error => console.error('Error:', error));
+    // Периодическое обновление данных о расходе воды и уровне воды
+    setInterval(() => {
+        fetch('/get_water_flow')
+            .then(response => response.json())
+            .then(data => {
+                updateWaterFlow(data);
+            })
+            .catch(error => console.error('Error:', error));
 
-            fetch('/get_water_level')
-                .then(response => response.json())
-                .then(data => {
-                    updateWaterLevelIndicators(data.emptyLevel, data.fullLevel);
-                })
-                .catch(error => console.error('Error:', error));
-        }, 1000); // Обновление каждую секунду
-    </script>
+        fetch('/get_water_level')
+            .then(response => response.json())
+            .then(data => {
+                updateWaterLevelIndicators(data.emptyLevel, data.fullLevel);
+            })
+            .catch(error => console.error('Error:', error));
+    }, 1000); // Обновление каждую секунду
+</script>
 </body>
 </html>
