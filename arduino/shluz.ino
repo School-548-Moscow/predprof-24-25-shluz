@@ -1,4 +1,14 @@
+#include <Adafruit_GFX.h>    // Библиотека для графики
+#include <Adafruit_ST7735.h> // Библиотека для TFT-дисплея
 #include <Servo.h>
+#include <Wire.h>
+
+// Параметры для TFT-дисплея
+#define TFT_CS   53  // Используем пин 53 для CS
+#define TFT_RST  6   // Пин для сброса (заменили на 6)
+#define TFT_DC   7   // Пин для выбора данных/команд (заменили на 7)
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+
 
 // Параметры для сервоприводов
 Servo servo1;
@@ -17,11 +27,10 @@ int motor4Pin1 = A3;
 int motor4Pin2 = A4;
 
 // Датчик расхода воды
-int flowSensorPin = A0; // Используем пин A0 (цифровой пин 14) для датчика расхода воды
-volatile uint16_t pulseCount = 0; // Счетчик импульсов
-float flowRate = 0.0; // Скорость потока воды (л/с)
-float totalWater = 0.0; // Общий объем израсходованной воды (л)
-unsigned long lastMeasurement = 0; // Время последнего измерения
+int flowSensorPin = A0;
+volatile long pulseCount = 0;
+float flowRate = 0.0;
+float totalWater = 0.0;
 
 // Светодиоды
 int led1RedPin = A8;
@@ -29,17 +38,16 @@ int led1GreenPin = A9;
 int led2RedPin = A10;
 int led2GreenPin = A11;
 
-// Реле
-int relay1Pin = 22;
-int relay2Pin = 24;
-int relay3Pin = 26;
-int relay4Pin = 28;
+// Управление моторами через L298N
+int motor1EnablePin = 44;  // ВКЛ/ВЫКЛ 1 мотор
+int motor1PinA = 24;       // Управление 1 мотором
+int motor1PinB = 26;       // Управление 1 мотором
+int motor2EnablePin = 45;  // ВКЛ/ВЫКЛ 2 мотор
+int motor2PinA = 28;       // Управление 2 мотором
+int motor2PinB = 30;       // Управление 2 мотором
 
-// Четырехканальное реле (подключено к пинам 30, 32, 34, 36)
-int relayChannel1Pin = 30;
-int relayChannel2Pin = 32;
-int relayChannel3Pin = 34;
-int relayChannel4Pin = 36;
+// Управление помпой
+int pumpPin = 32;
 
 // Состояния устройств
 int motorA1A2State = 0; // 1 - верх, 2 - низ, 0 - стоп
@@ -48,39 +56,27 @@ bool servo2_3State = false;  // false - закрыто, true - открыто
 bool servo4_5State = false;  // false - закрыто, true - открыто
 bool led1State = false;      // false - выключен, true - включен
 bool led2State = false;      // false - выключен, true - включен
-bool relay1State = true;    // false - выключено, true - включено
-bool relay2State = true;    // false - выключено, true - включено
-bool relay3State = true;    // false - выключено, true - включено
-bool relay4State = true;    // false - выключено, true - включено
-
-// Состояния четырехканального реле
-bool relayChannel1State = false; // false - выключено, true - включено
-bool relayChannel2State = false; // false - выключено, true - включено
-bool relayChannel3State = false; // false - выключено, true - включено
-bool relayChannel4State = false; // false - выключено, true - включено
-
-// Функция для обработки прерываний от датчика расхода воды
-void pulseCounter() {
-  pulseCount++;
-}
+int motor1Speed = 0;         // Скорость мотора 1 (0-255)
+int motor2Speed = 0;         // Скорость мотора 2 (0-255)
+bool pumpState = false;      // Состояние помпы
 
 // Функция для управления сервоприводами
 void controlServos(bool open2_3, bool open4_5) {
   if (open2_3) {
     servo1.write(-5); // Открыто
-    servo2.write(95);
+    servo2.write(93);
   } else {
     servo2.write(-5);
     delay(100);
-    servo1.write(95); // Закрыто
+    servo1.write(93); // Закрыто
   }
 
   if (open4_5) {
-    servo3.write(-10); // Открыто
-    servo4.write(95);
+    servo3.write(-5); // Открыто
+    servo4.write(93);
   } else {
-    servo3.write(95); // Закрыто
-    servo4.write(-10);
+    servo3.write(93); // Закрыто
+    servo4.write(-5);
   }
 }
 
@@ -129,23 +125,55 @@ void controlLEDs(bool led1On, bool led2On) {
   digitalWrite(led2GreenPin, led2On ? LOW : HIGH);
 }
 
-// Функция для управления реле
-void controlRelays() {
-  digitalWrite(relay1Pin, relay1State ? HIGH : LOW);
-  digitalWrite(relay2Pin, relay2State ? HIGH : LOW);
-  digitalWrite(relay3Pin, relay3State ? HIGH : LOW);
-  digitalWrite(relay4Pin, relay4State ? HIGH : LOW);
+// Функция для управления моторами через L298N
+void controlL298N(int speed1, int speed2) {
+  // Управление направлением и скоростью мотора 1
+  speed1 = map(speed1, 0, 100, 0, 255);
+  if (speed1 > 0) {
+    digitalWrite(motor1PinA, HIGH);
+    digitalWrite(motor1PinB, LOW);
+    analogWrite(motor1EnablePin, speed1);
+  } else {
+    digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
+  }
+  speed2 = map(speed2, 0, 100, 0, 255);
+  // Управление направлением и скоростью мотора 2
+  if (speed2 > 0) {
+    digitalWrite(motor2PinA, HIGH);
+    digitalWrite(motor2PinB, LOW);
+    analogWrite(motor2EnablePin, speed2);
+  } else {
+    digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
+  }
 }
 
-// Функция для управления четырехканальным реле
-void controlRelayChannels() {
-  digitalWrite(relayChannel1Pin, relayChannel1State ? HIGH : LOW);
-  digitalWrite(relayChannel2Pin, relayChannel2State ? HIGH : LOW);
-  digitalWrite(relayChannel3Pin, relayChannel3State ? HIGH : LOW);
-  digitalWrite(relayChannel4Pin, relayChannel4State ? HIGH : LOW);
+// Функция для управления помпой
+void controlPump(bool state) {
+  digitalWrite(pumpPin, state ? HIGH : LOW);
+}
+
+// Функция для обработки прерываний от датчика расхода воды
+void pulseCounter() {
+  pulseCount++;
+}
+
+// Функция для вывода текста на TFT-дисплей
+void displayText(const String &text) {
+  tft.fillScreen(ST7735_BLACK); // Очистка экрана
+  tft.setCursor(0, 0);          // Установка курсора в начало
+  tft.setTextColor(ST7735_WHITE); // Белый текст
+  tft.setTextSize(1);           // Размер текста
+  tft.println(text);            // Вывод текста
 }
 
 void setup() {
+  // Инициализация TFT-дисплея
+  tft.initR(INITR_BLACKTAB); // Инициализация дисплея
+  tft.fillScreen(ST7735_BLACK); // Очистка экрана
+  tft.setTextColor(ST7735_WHITE); // Белый текст
+  tft.setTextSize(1);           // Размер текста
+  tft.println("System started"); // Начальное сообщение
+
   // Инициализация сервоприводов
   servo1.attach(2);
   servo2.attach(3);
@@ -168,21 +196,20 @@ void setup() {
   pinMode(led2RedPin, OUTPUT);
   pinMode(led2GreenPin, OUTPUT);
 
-  // Инициализация реле
-  pinMode(relay1Pin, OUTPUT);
-  pinMode(relay2Pin, OUTPUT);
-  pinMode(relay3Pin, OUTPUT);
-  pinMode(relay4Pin, OUTPUT);
+  // Инициализация моторов через L298N
+  pinMode(motor1EnablePin, OUTPUT);
+  pinMode(motor1PinA, OUTPUT);
+  pinMode(motor1PinB, OUTPUT);
+  pinMode(motor2EnablePin, OUTPUT);
+  pinMode(motor2PinA, OUTPUT);
+  pinMode(motor2PinB, OUTPUT);
 
-  // Инициализация четырехканального реле
-  pinMode(relayChannel1Pin, OUTPUT);
-  pinMode(relayChannel2Pin, OUTPUT);
-  pinMode(relayChannel3Pin, OUTPUT);
-  pinMode(relayChannel4Pin, OUTPUT);
+  // Инициализация помпы
+  pinMode(pumpPin, OUTPUT);
 
   // Инициализация датчика расхода воды
   pinMode(flowSensorPin, INPUT);
-  attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, RISING);
+  attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
 
   // Инициализация Serial
   Serial.begin(9600);
@@ -195,6 +222,9 @@ void loop() {
     String command = Serial.readStringUntil('\n');
     command.trim();
     Serial.println("Received command: " + command);  // Отладочное сообщение
+
+    // Вывод команды на TFT-дисплей
+    displayText("Command: " + command);
 
     // Обработка команды запроса данных
     if (command == "GET_WATER_DATA") {
@@ -259,34 +289,22 @@ void loop() {
       Serial.println("LED2: OFF");
     }
 
-    // Управление реле
-    else if (command == "RELAY1_TOGGLE") {
-      relay1State = !relay1State;
-      Serial.println(relay1State ? "RELAY1: ON" : "RELAY1: OFF");
-    } else if (command == "RELAY2_TOGGLE") {
-      relay2State = !relay2State;
-      Serial.println(relay2State ? "RELAY2: ON" : "RELAY2: OFF");
-    } else if (command == "RELAY3_TOGGLE") {
-      relay3State = !relay3State;
-      Serial.println(relay3State ? "RELAY3: ON" : "RELAY3: OFF");
-    } else if (command == "RELAY4_TOGGLE") {
-      relay4State = !relay4State;
-      Serial.println(relay4State ? "RELAY4: ON" : "RELAY4: OFF");
+    // Обработка команд для управления моторами
+    else if (command.startsWith("MOTOR1_SPEED:")) {
+      motor1Speed = command.substring(13).toInt();
+      Serial.println("MOTOR1 SPEED: " + String(motor1Speed));
+    } else if (command.startsWith("MOTOR2_SPEED:")) {
+      motor2Speed = command.substring(13).toInt();
+      Serial.println("MOTOR2 SPEED: " + String(motor2Speed));
     }
 
-    // Управление четырехканальным реле
-    else if (command == "RELAYCH1_TOGGLE") {
-      relayChannel1State = !relayChannel1State;
-      Serial.println(relayChannel1State ? "RELAYCH1: ON" : "RELAYCH1: OFF");
-    } else if (command == "RELAYCH2_TOGGLE") {
-      relayChannel2State = !relayChannel2State;
-      Serial.println(relayChannel2State ? "RELAYCH2: ON" : "RELAYCH2: OFF");
-    } else if (command == "RELAYCH3_TOGGLE") {
-      relayChannel3State = !relayChannel3State;
-      Serial.println(relayChannel3State ? "RELAYCH3: ON" : "RELAYCH3: OFF");
-    } else if (command == "RELAYCH4_TOGGLE") {
-      relayChannel4State = !relayChannel4State;
-      Serial.println(relayChannel4State ? "RELAYCH4: ON" : "RELAYCH4: OFF");
+    // Управление помпой
+    else if (command == "PUMP_ON") {
+      pumpState = true;
+      Serial.println("PUMP: ON");
+    } else if (command == "PUMP_OFF") {
+      pumpState = false;
+      Serial.println("PUMP: OFF");
     }
   }
 
@@ -294,31 +312,20 @@ void loop() {
   controlServos(servo2_3State, servo4_5State);
   controlMotors(motorA1A2State, motor8_11State);
   controlLEDs(led1State, led2State);
-  controlRelays();
-  controlRelayChannels();
+  controlPump(pumpState);
+
+  // Управление моторами
+  controlL298N(motor1Speed, motor2Speed);
 
   // Обновление данных датчика каждую секунду
+  static unsigned long lastMeasurement = 0;
   if (millis() - lastMeasurement >= 1000) {
-    detachInterrupt(digitalPinToInterrupt(flowSensorPin)); // Отключаем прерывание для безопасного доступа к переменной pulseCount
-    float frequency = pulseCount; // Частота импульсов за 1 секунду
-    pulseCount = 0; // Сбрасываем счетчик импульсов
-    attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, RISING); // Включаем прерывание обратно
-
-    // Расчет скорости потока воды (л/с) по формуле Q = F / (5.9F + 4570)
-    flowRate = frequency / (5.9 * frequency + 4570);
-
-    // Расчет общего объема израсходованной воды (л)
-    totalWater += flowRate;
-
-    // Сохраняем время последнего измерения
+    detachInterrupt(digitalPinToInterrupt(flowSensorPin));
+    flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
+    totalWater += flowRate / 60;
+    pulseCount = 0;
     lastMeasurement = millis();
-
-    // Вывод данных в Serial для отладки
-    Serial.print("Flow Rate: ");
-    Serial.print(flowRate * 60, 2); // Переводим в л/мин
-    Serial.print(" л/мин, Total Water: ");
-    Serial.print(totalWater, 2);
-    Serial.println(" л");
+    attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
   }
 
   delay(100); // Задержка для стабильности

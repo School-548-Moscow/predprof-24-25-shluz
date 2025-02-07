@@ -5,7 +5,7 @@ import time
 app = Flask(__name__)
 
 # Настройки Serial
-serial_port = 'COM3'  # Укажите порт, к которому подключена Arduino
+serial_port = 'COM4'  # Укажите порт, к которому подключена Arduino
 baud_rate = 9600
 arduino = None
 
@@ -23,14 +23,9 @@ device_states = {
     "servo4_5": "close",  # open, close
     "led1": "off",        # on, off
     "led2": "off",        # on, off
-    "relay1": "off",      # on, off
-    "relay2": "off",      # on, off
-    "relay3": "off",      # on, off
-    "relay4": "off",      # on, off
-    "relaych1": "off",    # on, off (четырехканальное реле)
-    "relaych2": "off",    # on, off
-    "relaych3": "off",    # on, off
-    "relaych4": "off"     # on, off
+    "motor1_speed": 0,    # Скорость мотора 1 (0-100)
+    "motor2_speed": 0,    # Скорость мотора 2 (0-100)
+    "pump": "off"         # on, off
 }
 
 # Данные о расходе воды
@@ -67,6 +62,22 @@ def update_state():
     else:
         return jsonify({"status": "error", "message": "Invalid device"}), 400
 
+@app.route('/update_motor_state', methods=['POST'])
+def update_motor_state():
+    data = request.json
+    motor = data.get('motor')
+    state = data.get('state').lower()
+
+    if motor in ["motor1", "motor2"] and state in ["on", "off"]:
+        device_states[motor] = state
+        if arduino and arduino.is_open:
+            command = f"{motor.upper()}_{state.upper()}\n"
+            print(f"Sending command: {command}")  # Отладочное сообщение
+            arduino.write(command.encode())
+        return jsonify({"status": "success", "motor": motor, "state": state})
+    else:
+        return jsonify({"status": "error", "message": "Invalid motor or state"}), 400
+
 @app.route('/reset_water_counter', methods=['POST'])
 def reset_water_counter():
     if arduino and arduino.is_open:
@@ -94,8 +105,22 @@ def water_data_updater():
         update_water_data()
         time.sleep(1)
 
+@app.route('/get_water_level', methods=['GET'])
+def get_water_level():
+    if arduino and arduino.is_open:
+        arduino.write(b"GET_WATER_LEVEL\n")
+        response = arduino.readline().decode().strip()
+        if response:
+            try:
+                empty_level, full_level = response.split(',')
+                return jsonify({"emptyLevel": empty_level.lower(), "fullLevel": full_level.lower()})
+            except ValueError:
+                print("Invalid water level data format:", response)
+    return jsonify({"emptyLevel": "low", "fullLevel": "low"})
+
 if __name__ == '__main__':
     import threading
+
     # Запуск потока для обновления данных о расходе воды
     threading.Thread(target=water_data_updater, daemon=True).start()
     # Запуск Flask-приложения

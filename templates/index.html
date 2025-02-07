@@ -86,79 +86,115 @@
         .water-flow button:hover {
             background-color: #27ae60;
         }
+        .row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .column {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
     <h1>Система мониторинга и управления ШЛЮЗОМ №6</h1>
     <div class="container">
-        <!-- Защита нижний бьеф -->
-        <div class="control-group">
-            <h2>Защита нижний бьеф</h2>
-            <button onclick="updateState('motorA1A2', 'up')">Вверх</button>
-            <button onclick="updateState('motorA1A2', 'down')">Вниз</button>
-            <button onclick="updateState('motorA1A2', 'stop')">Стоп</button>
-            <div id="motorA1A2-indicator" class="status-indicator"></div>
+        <!-- Первый горизонтальный блок: Защита верхний бьеф и Защита нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Защита верхний бьеф</h2>
+                    <button onclick="updateState('motorA1A2', 'up')">Вверх</button>
+                    <button onclick="updateState('motorA1A2', 'down')">Вниз</button>
+                    <button onclick="updateState('motorA1A2', 'stop')">Стоп</button>
+                    <div id="motorA1A2-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Защита нижний бьеф</h2>
+                    <button onclick="updateState('motor8_11', 'up')">Вверх</button>
+                    <button onclick="updateState('motor8_11', 'down')">Вниз</button>
+                    <button onclick="updateState('motor8_11', 'stop')">Стоп</button>
+                    <div id="motor8_11-indicator" class="status-indicator"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Защита верхний бьеф -->
-        <div class="control-group">
-            <h2>Защита верхний бьеф</h2>
-            <button onclick="updateState('motor8_11', 'up')">Вверх</button>
-            <button onclick="updateState('motor8_11', 'down')">Вниз</button>
-            <button onclick="updateState('motor8_11', 'stop')">Стоп</button>
-            <div id="motor8_11-indicator" class="status-indicator"></div>
+        <!-- Второй горизонтальный блок: Светофор верхний бьеф, Ворота верхний бьеф, Светофор шлюз, Ворота нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Светофор верхний бьеф</h2>
+                    <button onclick="updateState('led1', 'on')">Включить</button>
+                    <button onclick="updateState('led1', 'off')">Выключить</button>
+                    <div id="led1-indicator" class="status-indicator"></div>
+                </div>
+                <div class="control-group">
+                    <h2>Ворота верхний бьеф</h2>
+                    <button onclick="updateState('servo2_3', 'open')">Открыть</button>
+                    <button onclick="updateState('servo2_3', 'close')">Закрыть</button>
+                    <div id="servo2_3-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Светофор шлюз</h2>
+                    <button onclick="updateState('led2', 'on')">Включить</button>
+                    <button onclick="updateState('led2', 'off')">Выключить</button>
+                    <div id="led2-indicator" class="status-indicator"></div>
+                </div>
+                <div class="control-group">
+                    <h2>Ворота нижний бьеф</h2>
+                    <button onclick="updateState('servo4_5', 'open')">Открыть</button>
+                    <button onclick="updateState('servo4_5', 'close')">Закрыть</button>
+                    <div id="servo4_5-indicator" class="status-indicator"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Ворота верхний бьеф -->
-        <div class="control-group">
-            <h2>Ворота верхний бьеф</h2>
-            <button onclick="updateState('servo2_3', 'open')">Открыть</button>
-            <button onclick="updateState('servo2_3', 'close')">Закрыть</button>
-            <div id="servo2_3-indicator" class="status-indicator"></div>
+        <!-- Третий горизонтальный блок: Насос Верхний бьеф и Насос Нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Насос Верхний бьеф</h2>
+                    <button onclick="updateMotorState('motor2', 'on')">ВКЛ</button>
+                    <button onclick="updateMotorState('motor2', 'off')">ВЫКЛ</button>
+                    <div id="motor2-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Насос Нижний бьеф</h2>
+                    <button onclick="updateMotorState('motor1', 'on')">ВКЛ</button>
+                    <button onclick="updateMotorState('motor1', 'off')">ВЫКЛ</button>
+                    <div id="motor1-indicator" class="status-indicator"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Ворота нижний бьеф -->
-        <div class="control-group">
-            <h2>Ворота нижний бьеф</h2>
-            <button onclick="updateState('servo4_5', 'open')">Открыть</button>
-            <button onclick="updateState('servo4_5', 'close')">Закрыть</button>
-            <div id="servo4_5-indicator" class="status-indicator"></div>
+        <!-- Четвертый горизонтальный блок: Датчик уровня воды "Пустой шлюз" и "Полный шлюз" -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Датчик уровня воды: Пустой шлюз</h2>
+                    <div id="water-level-empty-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Датчик уровня воды: Полный шлюз</h2>
+                    <div id="water-level-full-indicator" class="status-indicator"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Светофор верхний бьеф -->
+        <!-- Управление помпой -->
         <div class="control-group">
-            <h2>Светофор верхний бьеф</h2>
-            <button onclick="updateState('led1', 'on')">Включить</button>
-            <button onclick="updateState('led1', 'off')">Выключить</button>
-            <div id="led1-indicator" class="status-indicator"></div>
-        </div>
-
-        <!-- Светофор шлюз -->
-        <div class="control-group">
-            <h2>Светофор шлюз</h2>
-            <button onclick="updateState('led2', 'on')">Включить</button>
-            <button onclick="updateState('led2', 'off')">Выключить</button>
-            <div id="led2-indicator" class="status-indicator"></div>
-        </div>
-
-        <!-- Управление насосами -->
-        <div class="control-group">
-            <h2>Управление насосами</h2>
-            <button onclick="updateState('relay1', 'toggle')">1 - клапан верхний бьеф</button>
-            <div id="relay1-indicator" class="status-indicator"></div>
-            <button onclick="updateState('relay2', 'toggle')">2 - помпа шлюз</button>
-            <div id="relay2-indicator" class="status-indicator"></div>
-            <button onclick="updateState('relay3', 'toggle')">3 - клапан шлюз</button>
-            <div id="relay3-indicator" class="status-indicator"></div>
-            <button onclick="updateState('relay4', 'toggle')">4 - помпа верхний бьеф</button>
-            <div id="relay4-indicator" class="status-indicator"></div>
-        </div>
-
-        <!-- Управление подачей воды -->
-        <div class="control-group">
-            <h2>Управление подачей воды</h2>
-            <button onclick="updateState('relaych4', 'toggle')">Насосная система</button>
-            <div id="relaych4-indicator" class="status-indicator"></div>
+            <h2>Управление помпой</h2>
+            <button onclick="updateState('pump', 'on')">Включить</button>
+            <button onclick="updateState('pump', 'off')">Выключить</button>
+            <div id="pump-indicator" class="status-indicator"></div>
         </div>
 
         <!-- Счетчик расхода воды -->
@@ -191,19 +227,21 @@
             document.getElementById('led2-indicator').className =
                 `status-indicator ${states.led2 === 'on' ? 'green' : 'red'}`;
 
-            // Управление насосами
-            document.getElementById('relay1-indicator').className =
-                `status-indicator ${states.relay1 === 'on' ? 'green' : 'red'}`;
-            document.getElementById('relay2-indicator').className =
-                `status-indicator ${states.relay2 === 'on' ? 'green' : 'red'}`;
-            document.getElementById('relay3-indicator').className =
-                `status-indicator ${states.relay3 === 'on' ? 'green' : 'red'}`;
-            document.getElementById('relay4-indicator').className =
-                `status-indicator ${states.relay4 === 'on' ? 'green' : 'red'}`;
+            // Индикатор уровня воды
+            document.getElementById('water-level-indicator').className =
+                `status-indicator ${states.waterLevel === 'high' ? 'green' : 'red'}`;
 
-            // Управление подачей воды
-            document.getElementById('relaych4-indicator').className =
-                `status-indicator ${states.relaych4 === 'on' ? 'green' : 'red'}`;
+            // Помпа
+            document.getElementById('pump-indicator').className =
+                `status-indicator ${states.pump === 'on' ? 'green' : 'red'}`;
+
+            // Мотор 1
+            document.getElementById('motor1-indicator').className =
+                `status-indicator ${states.motor1 === 'on' ? 'green' : 'red'}`;
+
+            // Мотор 2
+            document.getElementById('motor2-indicator').className =
+                `status-indicator ${states.motor2 === 'on' ? 'green' : 'red'}`;
         }
 
         // Функция для обновления данных о расходе воды
@@ -222,18 +260,6 @@
                 })
                 .catch(error => console.error('Error:', error));
         }
-
-        // Загрузка начальных состояний
-        fetch('/get_states')
-            .then(response => response.json())
-            .then(states => updateIndicators(states))
-            .catch(error => console.error('Error:', error));
-
-        // Загрузка начальных данных о расходе воды
-        fetch('/get_water_flow')
-            .then(response => response.json())
-            .then(data => updateWaterFlow(data))
-            .catch(error => console.error('Error:', error));
 
         // Функция для отправки команд
         function updateState(device, state) {
@@ -255,11 +281,55 @@
             .catch(error => console.error('Error:', error));
         }
 
-        // Периодическое обновление данных о расходе воды
+        // Функция для обновления состояния моторов
+        function updateMotorState(motor, state) {
+            fetch('/update_motor_state', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ motor, state }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Обновляем индикаторы после успешного запроса
+                fetch('/get_states')
+                    .then(response => response.json())
+                    .then(states => updateIndicators(states));
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Загрузка начальных состояний
+        fetch('/get_states')
+            .then(response => response.json())
+            .then(states => updateIndicators(states))
+            .catch(error => console.error('Error:', error));
+
+        // Функция для обновления индикаторов уровня воды
+        function updateWaterLevelIndicators(emptyLevel, fullLevel) {
+            const emptyIndicator = document.getElementById('water-level-empty-indicator');
+            const fullIndicator = document.getElementById('water-level-full-indicator');
+
+            emptyIndicator.className = emptyLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
+            fullIndicator.className = fullLevel === 'high' ? 'status-indicator green' : 'status-indicator red';
+        }
+
+        // Периодическое обновление данных о расходе воды и уровне воды
         setInterval(() => {
             fetch('/get_water_flow')
                 .then(response => response.json())
-                .then(data => updateWaterFlow(data))
+                .then(data => {
+                    updateWaterFlow(data);
+                })
+                .catch(error => console.error('Error:', error));
+
+            fetch('/get_water_level')
+                .then(response => response.json())
+                .then(data => {
+                    updateWaterLevelIndicators(data.emptyLevel, data.fullLevel);
+                })
                 .catch(error => console.error('Error:', error));
         }, 1000); // Обновление каждую секунду
     </script>
