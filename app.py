@@ -23,9 +23,10 @@ device_states = {
     "servo4_5": "close",  # open, close
     "led1": "off",        # on, off
     "led2": "off",        # on, off
-    "motor1_speed": 0,    # Скорость мотора 1 (0-100)
-    "motor2_speed": 0,    # Скорость мотора 2 (0-100)
-    "pump": "off"         # on, off
+    "motor1": "off",      # on, off (насос Нижний бьеф)
+    "motor2": "off",      # on, off (насос Верхний бьеф)
+    "water_level_empty": "low",  # high, low
+    "water_level_full": "low"    # high, low
 }
 
 # Данные о расходе воды
@@ -85,6 +86,21 @@ def reset_water_counter():
     water_data["total_water"] = 0.0
     return jsonify(water_data)
 
+@app.route('/get_water_level', methods=['GET'])
+def get_water_level():
+    if arduino and arduino.is_open:
+        arduino.write(b"GET_WATER_LEVEL\n")
+        response = arduino.readline().decode().strip()
+        if response:
+            try:
+                empty_level, full_level = response.split(',')
+                device_states["water_level_empty"] = empty_level.lower()
+                device_states["water_level_full"] = full_level.lower()
+                return jsonify({"emptyLevel": empty_level.lower(), "fullLevel": full_level.lower()})
+            except ValueError:
+                print("Invalid water level data format:", response)
+    return jsonify({"emptyLevel": "low", "fullLevel": "low"})
+
 # Функция для обновления данных о расходе воды
 def update_water_data():
     if arduino and arduino.is_open:
@@ -97,7 +113,7 @@ def update_water_data():
                 water_data["flow_rate"] = flow_rate
                 print(f"Water Data: Total = {total_water}, Flow Rate = {flow_rate}")
             except ValueError:
-                print("Invalid water data format")
+                print("Invalid water data format:", response)
 
 # Периодическое обновление данных о расходе воды
 def water_data_updater():
@@ -105,22 +121,8 @@ def water_data_updater():
         update_water_data()
         time.sleep(1)
 
-@app.route('/get_water_level', methods=['GET'])
-def get_water_level():
-    if arduino and arduino.is_open:
-        arduino.write(b"GET_WATER_LEVEL\n")
-        response = arduino.readline().decode().strip()
-        if response:
-            try:
-                empty_level, full_level = response.split(',')
-                return jsonify({"emptyLevel": empty_level.lower(), "fullLevel": full_level.lower()})
-            except ValueError:
-                print("Invalid water level data format:", response)
-    return jsonify({"emptyLevel": "low", "fullLevel": "low"})
-
 if __name__ == '__main__':
     import threading
-
     # Запуск потока для обновления данных о расходе воды
     threading.Thread(target=water_data_updater, daemon=True).start()
     # Запуск Flask-приложения

@@ -1,0 +1,257 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Servo.h>
+
+// Настройки точки доступа
+const char* ssid = "shluz_web";
+const char* password = "12344321";
+
+WebServer server(80);
+
+// Инициализация сервоприводов
+Servo servo1;
+Servo servo2;
+Servo servo3;
+Servo servo4;
+
+// Параметры для драйверов двигателей L9110S
+int motorA1Pin = 13;
+int motorA2Pin = 14;
+int motorB1Pin = 15;
+int motorB2Pin = 16;
+
+// Датчики уровня воды
+const uint8_t pinSensorEmpty = 22; // Пин для датчика "Пустой шлюз"
+const uint8_t pinSensorFull = 23;  // Пин для датчика "Полный шлюз"
+bool waterLevelEmpty = false;      // Состояние уровня воды "Пустой шлюз"
+bool waterLevelFull = false;       // Состояние уровня воды "Полный шлюз"
+
+// Датчик расхода воды
+int flowSensorPin = 25;
+volatile long pulseCount = 0;
+float flowRate = 0.0;
+float totalWater = 0.0;
+
+// Светодиоды
+int led1RedPin = 17;
+int led1GreenPin = 18;
+int led2RedPin = 19;
+int led2GreenPin = 21;
+
+// Управление моторами через L298N
+int motor1EnablePin = 27;  // ВКЛ/ВЫКЛ 1 мотор
+int motor1PinA = 32;       // Управление 1 мотором
+int motor1PinB = 33;       // Управление 1 мотором
+int motor2EnablePin = 34;  // ВКЛ/ВЫКЛ 2 мотор
+int motor2PinA = 35;       // Управление 2 мотором
+int motor2PinB = 36;       // Управление 2 мотором
+
+// Управление помпой
+int pumpPin = 26;
+
+// Состояния устройств
+int motorA1A2State = 0; // 1 - верх, 2 - низ, 0 - стоп
+int motor8_11State = 0; // 1 - верх, 2 - низ, 0 - стоп
+bool servo2_3State = false;  // false - закрыто, true - открыто
+bool servo4_5State = false;  // false - закрыто, true - открыто
+bool led1State = false;      // false - выключен, true - включен
+bool led2State = false;      // false - выключен, true - включен
+int motor1Speed = 0;         // Скорость мотора 1 (0-255)
+int motor2Speed = 0;         // Скорость мотора 2 (0-255)
+bool pumpState = false;      // Состояние помпы
+
+// Функция для управления сервоприводами
+void controlServos(bool open2_3, bool open4_5) {
+  if (open2_3) {
+    servo1.write(-5); // Открыто
+    servo2.write(93);
+  } else {
+    servo2.write(-5);
+    delay(100);
+    servo1.write(93); // Закрыто
+  }
+
+  if (open4_5) {
+    servo3.write(-5); // Открыто
+    servo4.write(93);
+  } else {
+    servo3.write(93); // Закрыто
+    servo4.write(-5);
+  }
+}
+
+// Функция для управления моторами
+void controlMotors(int motorA1A2Up, int motor8_11Up) {
+  if (motorA1A2Up == 1) {
+    digitalWrite(motorA1Pin, HIGH); // Верх
+    digitalWrite(motorA2Pin, LOW);
+  } else if (motorA1A2Up == 2) {
+    digitalWrite(motorA1Pin, LOW); // вниз
+    digitalWrite(motorA2Pin, HIGH);
+  } else if (motorA1A2Up == 0) {
+    digitalWrite(motorA1Pin, LOW); // стоп
+    digitalWrite(motorA2Pin, LOW);
+  }
+
+  if (motor8_11Up == 1) {
+    digitalWrite(motorB1Pin, HIGH); // Верх
+    digitalWrite(motorB2Pin, LOW);
+  } else if (motor8_11Up == 2) {
+    digitalWrite(motorB1Pin, LOW); // вниз
+    digitalWrite(motorB2Pin, HIGH);
+  } else if (motor8_11Up == 0) {
+    digitalWrite(motorB1Pin, LOW); // стоп
+    digitalWrite(motorB2Pin, LOW);
+  }
+}
+
+// Функция для управления светодиодами
+void controlLEDs(bool led1On, bool led2On) {
+  digitalWrite(led1RedPin, led1On ? HIGH : LOW);
+  digitalWrite(led1GreenPin, led1On ? LOW : HIGH);
+  digitalWrite(led2RedPin, led2On ? HIGH : LOW);
+  digitalWrite(led2GreenPin, led2On ? LOW : HIGH);
+}
+
+// Функция для управления моторами через L298N
+void controlL298N(bool motor1On, bool motor2On) {
+  // Управление мотором 1
+  if (motor1On) {
+    digitalWrite(motor1PinA, HIGH);
+    digitalWrite(motor1PinB, LOW);
+    analogWrite(motor1EnablePin, 255); // Полная скорость
+  } else {
+    digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
+  }
+
+  // Управление мотором 2
+  if (motor2On) {
+    digitalWrite(motor2PinA, HIGH);
+    digitalWrite(motor2PinB, LOW);
+    analogWrite(motor2EnablePin, 255); // Полная скорость
+  } else {
+    digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
+  }
+}
+
+// Функция для управления помпой
+void controlPump(bool state) {
+  digitalWrite(pumpPin, state ? HIGH : LOW);
+}
+
+// Функция для обработки прерываний от датчика расхода воды
+void pulseCounter() {
+  pulseCount++;
+}
+
+// Функция для вывода текста на TFT-дисплей
+void displayText(const String &text) {
+  // Здесь можно добавить код для вывода текста на дисплей, если он подключен
+}
+
+void setup() {
+  // Инициализация сервоприводов
+  servo1.attach(2);
+  servo2.attach(4);
+  servo3.attach(5);
+  servo4.attach(12);
+
+  // Инициализация моторов
+  pinMode(motorA1Pin, OUTPUT);
+  pinMode(motorA2Pin, OUTPUT);
+  pinMode(motorB1Pin, OUTPUT);
+  pinMode(motorB2Pin, OUTPUT);
+
+  // Инициализация светодиодов
+  pinMode(led1RedPin, OUTPUT);
+  pinMode(led1GreenPin, OUTPUT);
+  pinMode(led2RedPin, OUTPUT);
+  pinMode(led2GreenPin, OUTPUT);
+
+  // Инициализация моторов через L298N
+  pinMode(motor1EnablePin, OUTPUT);
+  pinMode(motor1PinA, OUTPUT);
+  pinMode(motor1PinB, OUTPUT);
+  pinMode(motor2EnablePin, OUTPUT);
+  pinMode(motor2PinA, OUTPUT);
+  pinMode(motor2PinB, OUTPUT);
+
+  // Инициализация помпы
+  pinMode(pumpPin, OUTPUT);
+
+  // Инициализация датчиков уровня воды
+  pinMode(pinSensorEmpty, INPUT_PULLUP);
+  pinMode(pinSensorFull, INPUT_PULLUP);
+
+  // Инициализация датчика расхода воды
+  pinMode(flowSensorPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
+
+  // Настройка точки доступа
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  // Настройка маршрутов веб-сервера
+  server.on("/", handleRoot);
+  server.on("/motorA1A2_up", handleMotorA1A2Up);
+  server.on("/motorA1A2_down", handleMotorA1A2Down);
+  server.on("/motorA1A2_stop", handleMotorA1A2Stop);
+  server.on("/motor8_11_up", handleMotor8_11Up);
+  server.on("/motor8_11_down", handleMotor8_11Down);
+  server.on("/motor8_11_stop", handleMotor8_11Stop);
+  server.on("/servo2_3_open", handleServo2_3Open);
+  server.on("/servo2_3_close", handleServo2_3Close);
+  server.on("/servo4_5_open", handleServo4_5Open);
+  server.on("/servo4_5_close", handleServo4_5Close);
+  server.on("/led1_on", handleLED1On);
+  server.on("/led1_off", handleLED1Off);
+  server.on("/led2_on", handleLED2On);
+  server.on("/led2_off", handleLED2Off);
+  server.on("/motor1_on", handleMotor1On);
+  server.on("/motor1_off", handleMotor1Off);
+  server.on("/motor2_on", handleMotor2On);
+  server.on("/motor2_off", handleMotor2Off);
+  server.on("/pump_on", handlePumpOn);
+  server.on("/pump_off", handlePumpOff);
+
+  // Запуск веб-сервера
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void loop() {
+  // Обработка HTTP-запросов
+  server.handleClient();
+
+  // Обработка сигналов с датчиков уровня воды
+  waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
+  waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
+
+  // Отправка состояния уровня воды в Serial
+  if (!waterLevelEmpty) {
+    Serial.println("WATER_LEVEL_EMPTY:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_EMPTY:LOW");
+  }
+
+  if (waterLevelFull) {
+    Serial.println("WATER_LEVEL_FULL:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_FULL:LOW");
+  }
+
+  // Обновление данных датчика каждую секунду
+  static unsigned long lastMeasurement = 0;
+  if (millis() - lastMeasurement >= 1000) {
+    detachInterrupt(digitalPinToInterrupt(flowSensorPin));
+    flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
+    totalWater += flowRate / 60;
+    pulseCount = 0;
+    lastMeasurement = millis();
+    attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
+  }
+
+  delay(100); // Задержка для стабильности
+}
