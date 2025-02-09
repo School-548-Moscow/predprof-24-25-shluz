@@ -1,16 +1,21 @@
 from flask import Flask, render_template, request, jsonify
+from flask_caching import Cache
 import serial
 import time
 
+
+
 app = Flask(__name__)
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+# @cache.cached(timeout=5)  # Кэшируем данные на 5 секунд
 
 # Настройки Serial
 serial_port = 'COM4'  # Укажите порт, к которому подключена Arduino
-baud_rate = 9600
+baud_rate = 115200
 arduino = None
 
 try:
-    arduino = serial.Serial(serial_port, baud_rate, timeout=2)
+    arduino = serial.Serial(serial_port, baud_rate, timeout=1)
     time.sleep(2)  # Ожидание инициализации Serial
 except Exception as e:
     print(f"Ошибка Serial: {e}")
@@ -80,6 +85,7 @@ def update_motor_state():
 def update_data():
     if arduino and arduino.is_open:
         try:
+            arduino.reset_input_buffer()  # Очистка буфера перед чтением
             response = arduino.readline().decode().strip()
             print(f"Полученные данные от Arduino: '{response}'")  # Отладочный вывод
             data = list(map(str, response.split(',')))
@@ -119,7 +125,7 @@ def data_updater():
     while True:
         with app.app_context():  # Устанавливаем контекст приложения
             update_data()
-        time.sleep(0.2)
+        time.sleep(1)
 
 if __name__ == '__main__':
     import threading

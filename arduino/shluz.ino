@@ -226,7 +226,55 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
 
   // Инициализация Serial
-  Serial.begin(9600);
+  Serial.begin(115200);
+}
+
+void full_shluz() {
+  //controlServos(true, false); // открыть верхний бъеф
+  //controlLEDs(true,false); // включить верхний зеленый светодиод
+  //
+  //while (distanse(PIN_ECHO_MIDDLE, PIN_ECHO_MIDDLE) > 10) { // держим верхний бъеф открытым пока не припарковался корабль в шлюзе
+  //  delay(100);
+  //}
+  //controlLEDs(false,false); // переключить верхний зеленый светодиод на красный
+  //controlServos(false, false); // закрыть верхний бъеф
+  //  delay(2000); // задержка в 2 секунды
+  //controlL298N(true,false); // откачиваем воду из шлюза
+  //while (waterLevelEmpty) {
+  //delay(100);
+  //}
+  //controlL298N(false,false); // останавливаем откачку воды из шлюза
+  //
+  //controlServos(false, true); // открыть нижний бъеф
+  //controlLEDs(false,true); // включить нижний зеленый светодиод
+  //while (distanse(PIN_ECHO_DOWN, PIN_ECHO_DOWN) > 10) { // держим нижний бъеф открытым пока не проплыл корабль из шлюза
+  //  delay(100);
+  //controlLEDs(false,false); // переключить нижний зеленый светодиод на красный
+  //controlServos(false, false); // закрыть нижний бъеф
+}
+
+void empty_shluz() {
+  //controlServos(false, true);                                 // открыть нижний бъеф
+  //controlLEDs(false,true);                                    // включить нижний зеленый светодиод
+  //
+  //while (distanse(PIN_ECHO_MIDDLE, PIN_ECHO_MIDDLE) > 10) {   // держим верхний бъеф открытым пока не припарковался корабль в шлюзе
+  //  delay(100);
+  //}
+  //controlLEDs(false,false);                                   // переключить верхний зеленый светодиод на красный
+  //controlServos(false, false);                                // закрыть верхний бъеф
+  //delay(2000);                                                // задержка в 2 секунды
+  //controlL298N(false,true);                                   // наполняем водой шлюз
+  //while (!waterLevelFull) {
+  //  delay(100);
+  //}
+  //controlL298N(false,false);                                  // останавливаем наполнение водой шлюза
+  //delay(2000);                                                // задержка в 2 секунды
+  //controlServos(true, false);                                 // открыть верхний бъеф
+  //controlLEDs(true,false);                                    // включить верхний зеленый светодиод
+  //while (distanse(PIN_ECHO_UP, PIN_ECHO_UP) > 10) {           // держим нижний бъеф открытым пока не проплыл корабль из шлюза
+  //  delay(100);
+  //controlLEDs(false,false);                                   // переключить верхний зеленый светодиод на красный
+  //controlServos(false, false);                                // закрыть верхний бъеф
 }
 
 void loop() {
@@ -336,14 +384,14 @@ void loop() {
 
   // Обновление данных датчиков каждую секунду
   static unsigned long lastMeasurement = 0;
-  if (millis() - lastMeasurement >= 100) {
+  if (millis() - lastMeasurement >= 1000) {
     detachInterrupt(digitalPinToInterrupt(flowSensorPin));
     flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
     totalWater += flowRate / 60;
     pulseCount = 0;
     lastMeasurement = millis();
     attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
-
+  }
   // отправка данных одной строкой
   String data_to_serial = String(distanse(PIN_ECHO_DOWN, PIN_TRIG_DOWN)) + ",";
   data_to_serial += String(distanse(PIN_ECHO_MIDDLE, PIN_TRIG_MIDDLE)) + ",";
@@ -352,8 +400,13 @@ void loop() {
   data_to_serial += String(flowRate) + ",";
   data_to_serial += String(!waterLevelEmpty ? "high" : "low") + ",";
   data_to_serial += String(waterLevelFull ? "high" : "low");
+
+  delay(100);
   Serial.println(data_to_serial);
+
+  if (distanse(PIN_ECHO_UP, PIN_TRIG_UP) < 10.0) {
+    full_shluz();
   }
 
-  delay(100); // Задержка для стабильности
+  delay(500); // Задержка для стабильности
 }
