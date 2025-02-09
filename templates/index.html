@@ -189,6 +189,31 @@
             </div>
         </div>
 
+        <!-- Блок с датчиками расстояния -->
+        <div class="row">
+            <div class="column">
+                <div class="distance-group">
+                    <h2>Датчик расстояния: Нижний бьеф</h2>
+                    <p>Расстояние: <span id="distance-down">0.00</span> см</p>
+                    <div id="distance-down-indicator" class="distance-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="distance-group">
+                    <h2>Датчик расстояния: Шлюз</h2>
+                    <p>Расстояние: <span id="distance-middle">0.00</span> см</p>
+                    <div id="distance-middle-indicator" class="distance-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="distance-group">
+                    <h2>Датчик расстояния: Верхний бьеф</h2>
+                    <p>Расстояние: <span id="distance-up">0.00</span> см</p>
+                    <div id="distance-up-indicator" class="distance-indicator"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Управление помпой -->
         <div class="control-group">
             <h2>Управление помпой</h2>
@@ -227,10 +252,6 @@
             document.getElementById('led2-indicator').className =
                 `status-indicator ${states.led2 === 'on' ? 'green' : 'red'}`;
 
-            // Индикатор уровня воды
-            document.getElementById('water-level-indicator').className =
-                `status-indicator ${states.waterLevel === 'high' ? 'green' : 'red'}`;
-
             // Помпа
             document.getElementById('pump-indicator').className =
                 `status-indicator ${states.pump === 'on' ? 'green' : 'red'}`;
@@ -242,6 +263,12 @@
             // Мотор 2
             document.getElementById('motor2-indicator').className =
                 `status-indicator ${states.motor2 === 'on' ? 'green' : 'red'}`;
+
+            // Индикаторы уровня воды
+            document.getElementById('water-level-empty-indicator').className =
+                `status-indicator ${states.water_level_empty === 'high' ? 'red' : 'green'}`;
+            document.getElementById('water-level-full-indicator').className =
+                `status-indicator ${states.water_level_full === 'high' ? 'red' : 'green'}`;
         }
 
         // Функция для обновления данных о расходе воды
@@ -250,17 +277,7 @@
             document.getElementById('flow-rate').textContent = data.flow_rate.toFixed(2);
         }
 
-        // Функция для сброса счетчика воды
-        function resetWaterCounter() {
-            fetch('/reset_water_counter', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data);
-                    updateWaterFlow(data);
-                })
-                .catch(error => console.error('Error:', error));
-        }
-
+        // Функция для отправки команд
         // Функция для отправки команд
         function updateState(device, state) {
             fetch('/update_state', {
@@ -307,7 +324,57 @@
             .then(states => updateIndicators(states))
             .catch(error => console.error('Error:', error));
 
-        // Функция для обновления индикаторов уровня воды
+        // Функция для обновления индикаторов насосов
+        function updateMotorIndicators(motor1State, motor2State) {
+            const motor1Indicator = document.getElementById('motor1-indicator');
+            const motor2Indicator = document.getElementById('motor2-indicator');
+
+            // Красный индикатор - выкл, зеленый - вкл
+            motor1Indicator.className = motor1State === 'on' ? 'status-indicator green' : 'status-indicator red';
+            motor2Indicator.className = motor2State === 'on' ? 'status-indicator green' : 'status-indicator red';
+        }
+
+        // Периодическое обновление данных
+        setInterval(() => {
+            fetch('/update_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+                .then(response => response.json())
+                .then(data => {
+                    updateDistanceData(data);
+                    updateWaterFlow(data);
+                    updateWaterLevelIndicators(data.waterLevelEmpty, data.waterLevelFull);
+                })
+                .catch(error => console.error('Error:', error));
+
+        // Функция для обновления данных с датчиков расстояния
+    function updateDistanceData(data) {
+        // Нижний бьеф
+        document.getElementById('distance-down').textContent = data.distanse_down.toFixed(2);
+        document.getElementById('distance-down-indicator').className =
+            data.distanse_down < 12 ? 'distance-indicator red' : 'distance-indicator green';
+
+        // Шлюз
+        document.getElementById('distance-middle').textContent = data.distanse_middle.toFixed(2);
+        document.getElementById('distance-middle-indicator').className =
+            data.distanse_middle < 12 ? 'distance-indicator red' : 'distance-indicator green';
+
+        // Верхний бьеф
+        document.getElementById('distance-up').textContent = data.distanse_up.toFixed(2);
+        document.getElementById('distance-up-indicator').className =
+            data.distanse_up < 12 ? 'distance-indicator red' : 'distance-indicator green';
+    }
+
+    // Функция для обновления данных о расходе воды
+    function updateWaterFlow(data) {
+        document.getElementById('total-water').textContent = data.total_water.toFixed(2);
+        document.getElementById('flow-rate').textContent = data.flow_rate.toFixed(2);
+    }
+
+    // Функция для обновления индикаторов уровня воды
     function updateWaterLevelIndicators(emptyLevel, fullLevel) {
         const emptyIndicator = document.getElementById('water-level-empty-indicator');
         const fullIndicator = document.getElementById('water-level-full-indicator');
@@ -316,32 +383,6 @@
         emptyIndicator.className = emptyLevel === 'high' ? 'status-indicator red' : 'status-indicator green';
         fullIndicator.className = fullLevel === 'high' ? 'status-indicator red' : 'status-indicator green';
     }
-
-    // Функция для обновления индикаторов насосов
-    function updateMotorIndicators(motor1State, motor2State) {
-        const motor1Indicator = document.getElementById('motor1-indicator');
-        const motor2Indicator = document.getElementById('motor2-indicator');
-
-        // Красный индикатор - выкл, зеленый - вкл
-        motor1Indicator.className = motor1State === 'on' ? 'status-indicator green' : 'status-indicator red';
-        motor2Indicator.className = motor2State === 'on' ? 'status-indicator green' : 'status-indicator red';
-    }
-
-    // Периодическое обновление данных
-    setInterval(() => {
-        fetch('/get_water_flow')
-            .then(response => response.json())
-            .then(data => {
-                updateWaterFlow(data);
-            })
-            .catch(error => console.error('Error:', error));
-
-        fetch('/get_water_level')
-            .then(response => response.json())
-            .then(data => {
-                updateWaterLevelIndicators(data.emptyLevel, data.fullLevel);
-            })
-            .catch(error => console.error('Error:', error));
 
         fetch('/get_states')
             .then(response => response.json())

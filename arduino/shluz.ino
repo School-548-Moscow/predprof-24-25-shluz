@@ -227,7 +227,6 @@ void setup() {
 
   // Инициализация Serial
   Serial.begin(9600);
-  Serial.println("System started"); // Отладочное сообщение
 }
 
 void loop() {
@@ -337,7 +336,7 @@ void loop() {
 
   // Обновление данных датчиков каждую секунду
   static unsigned long lastMeasurement = 0;
-  if (millis() - lastMeasurement >= 200) {
+  if (millis() - lastMeasurement >= 100) {
     detachInterrupt(digitalPinToInterrupt(flowSensorPin));
     flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
     totalWater += flowRate / 60;
