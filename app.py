@@ -100,7 +100,7 @@ def data_updater():
     while True:
         # update_water_data()
         update_data()
-        time.sleep(1)
+        time.sleep(0.2)
 
 if __name__ == '__main__':
     import threading

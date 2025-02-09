@@ -239,21 +239,8 @@ void loop() {
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    //Serial.println("Received command: " + command);  // Отладочное сообщение
-
-    // Обработка команды запроса данных о расходе воды
-//    if (command == "GET_WATER_DATA") {
-//      String data = String(totalWater) + "," + String(flowRate);
-//      Serial.println(data);
-//    }
-//    // Обработка команды запроса данных о уровне воды
-//    else if (command == "GET_WATER_LEVEL") {
-//      String data = String(waterLevelEmpty ? "high" : "low") + "," + String(waterLevelFull ? "high" : "low");
-//      Serial.println(data);
-//    }
 
     // Управление моторами A1,A2 и A3,A4
-//    else
     if (command == "MOTORA1A2_UP") {
       motorA1A2State = 1;
       Serial.println("MOTORA1A2: UP");
@@ -348,22 +335,9 @@ void loop() {
   waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
   waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
 
-  // Отправка состояния уровня воды в Serial
-  //  if (!waterLevelEmpty) {
-  //    Serial.println("WATER_LEVEL_EMPTY:HIGH");
-  //  } else {
-  //    Serial.println("WATER_LEVEL_EMPTY:LOW");
-  //  }
-  //
-  //  if (waterLevelFull) {
-  //    Serial.println("WATER_LEVEL_FULL:HIGH");
-  //  } else {
-  //    Serial.println("WATER_LEVEL_FULL:LOW");
-  //  }
-
-  // Обновление данных датчика каждую секунду
+  // Обновление данных датчиков каждую секунду
   static unsigned long lastMeasurement = 0;
-  if (millis() - lastMeasurement >= 1000) {
+  if (millis() - lastMeasurement >= 200) {
     detachInterrupt(digitalPinToInterrupt(flowSensorPin));
     flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
     totalWater += flowRate / 60;
@@ -380,8 +354,7 @@ void loop() {
   data_to_serial += String(!waterLevelEmpty ? "high" : "low") + ",";
   data_to_serial += String(waterLevelFull ? "high" : "low");
   Serial.println(data_to_serial);
-
   }
 
-  delay(200); // Задержка для стабильности
+  delay(100); // Задержка для стабильности
 }
