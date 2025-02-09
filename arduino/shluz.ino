@@ -1,14 +1,5 @@
-#include <Adafruit_GFX.h>    // Библиотека для графики
-#include <Adafruit_ST7735.h> // Библиотека для TFT-дисплея
 #include <Servo.h>
 #include <Wire.h>
-
-// Параметры для TFT-дисплея
-#define TFT_CS   53  // Используем пин 53 для CS
-#define TFT_RST  6   // Пин для сброса (заменили на 6)
-#define TFT_DC   7   // Пин для выбора данных/команд (заменили на 7)
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
-
 
 // Параметры для сервоприводов
 Servo servo1;
@@ -54,6 +45,14 @@ int motor2PinB = 30;       // Управление 2 мотором
 
 // Управление помпой
 int pumpPin = 32;
+
+// Датчики расстояний
+int PIN_TRIG_DOWN = 47;
+int PIN_ECHO_DOWN = 46;
+int PIN_TRIG_MIDDLE = 49;
+int PIN_ECHO_MIDDLE = 48;
+int PIN_TRIG_UP = 51;
+int PIN_ECHO_UP = 50;
 
 // Состояния устройств
 int motorA1A2State = 0; // 1 - верх, 2 - низ, 0 - стоп
@@ -157,28 +156,26 @@ void controlPump(bool state) {
   digitalWrite(pumpPin, state ? HIGH : LOW);
 }
 
+float distanse(int PIN_ECHO, int PIN_TRIG) {
+  long duration, cm;
+
+  digitalWrite(PIN_TRIG, LOW);
+  delayMicroseconds(5);
+  digitalWrite(PIN_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_TRIG, LOW);
+
+  duration = pulseIn(PIN_ECHO, HIGH);
+  cm = (duration / 2) / 29.1;
+  return cm;
+}
+
 // Функция для обработки прерываний от датчика расхода воды
 void pulseCounter() {
   pulseCount++;
 }
 
-// Функция для вывода текста на TFT-дисплей
-void displayText(const String &text) {
-  tft.fillScreen(ST7735_BLACK); // Очистка экрана
-  tft.setCursor(0, 0);          // Установка курсора в начало
-  tft.setTextColor(ST7735_WHITE); // Белый текст
-  tft.setTextSize(1);           // Размер текста
-  tft.println(text);            // Вывод текста
-}
-
 void setup() {
-  // Инициализация TFT-дисплея
-  tft.initR(INITR_BLACKTAB); // Инициализация дисплея
-  tft.fillScreen(ST7735_BLACK); // Очистка экрана
-  tft.setTextColor(ST7735_WHITE); // Белый текст
-  tft.setTextSize(1);           // Размер текста
-  tft.println("System started"); // Начальное сообщение
-
   // Инициализация сервоприводов
   servo1.attach(2);
   servo2.attach(3);
@@ -212,6 +209,14 @@ void setup() {
   // Инициализация помпы
   pinMode(pumpPin, OUTPUT);
 
+  // Инициализация датчиков расстояния
+  pinMode(PIN_TRIG_DOWN, OUTPUT);
+  pinMode(PIN_ECHO_DOWN, INPUT);
+  pinMode(PIN_TRIG_MIDDLE, OUTPUT);
+  pinMode(PIN_ECHO_MIDDLE, INPUT);
+  pinMode(PIN_TRIG_UP, OUTPUT);
+  pinMode(PIN_ECHO_UP, INPUT);
+
   // Инициализация датчиков уровня воды
   pinMode(pinSensorEmpty, INPUT_PULLUP);
   pinMode(pinSensorFull, INPUT_PULLUP);
@@ -234,21 +239,22 @@ void loop() {
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    Serial.println("Received command: " + command);  // Отладочное сообщение
+    //Serial.println("Received command: " + command);  // Отладочное сообщение
 
     // Обработка команды запроса данных о расходе воды
-    if (command == "GET_WATER_DATA") {
-      String data = String(totalWater) + "," + String(flowRate);
-      Serial.println(data);
-    }
-    // Обработка команды запроса данных о уровне воды
-    else if (command == "GET_WATER_LEVEL") {
-      String data = String(waterLevelEmpty ? "high" : "low") + "," + String(waterLevelFull ? "high" : "low");
-      Serial.println(data);
-    }
+//    if (command == "GET_WATER_DATA") {
+//      String data = String(totalWater) + "," + String(flowRate);
+//      Serial.println(data);
+//    }
+//    // Обработка команды запроса данных о уровне воды
+//    else if (command == "GET_WATER_LEVEL") {
+//      String data = String(waterLevelEmpty ? "high" : "low") + "," + String(waterLevelFull ? "high" : "low");
+//      Serial.println(data);
+//    }
 
     // Управление моторами A1,A2 и A3,A4
-    else if (command == "MOTORA1A2_UP") {
+//    else
+    if (command == "MOTORA1A2_UP") {
       motorA1A2State = 1;
       Serial.println("MOTORA1A2: UP");
     } else if (command == "MOTORA1A2_DOWN") {
@@ -343,17 +349,17 @@ void loop() {
   waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
 
   // Отправка состояния уровня воды в Serial
-  if (waterLevelEmpty) {
-    Serial.println("WATER_LEVEL_EMPTY:HIGH");
-  } else {
-    Serial.println("WATER_LEVEL_EMPTY:LOW");
-  }
-
-  if (waterLevelFull) {
-    Serial.println("WATER_LEVEL_FULL:HIGH");
-  } else {
-    Serial.println("WATER_LEVEL_FULL:LOW");
-  }
+  //  if (!waterLevelEmpty) {
+  //    Serial.println("WATER_LEVEL_EMPTY:HIGH");
+  //  } else {
+  //    Serial.println("WATER_LEVEL_EMPTY:LOW");
+  //  }
+  //
+  //  if (waterLevelFull) {
+  //    Serial.println("WATER_LEVEL_FULL:HIGH");
+  //  } else {
+  //    Serial.println("WATER_LEVEL_FULL:LOW");
+  //  }
 
   // Обновление данных датчика каждую секунду
   static unsigned long lastMeasurement = 0;
@@ -364,7 +370,18 @@ void loop() {
     pulseCount = 0;
     lastMeasurement = millis();
     attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
+
+  // отправка данных одной строкой
+  String data_to_serial = String(distanse(PIN_ECHO_DOWN, PIN_TRIG_DOWN)) + ",";
+  data_to_serial += String(distanse(PIN_ECHO_MIDDLE, PIN_TRIG_MIDDLE)) + ",";
+  data_to_serial += String(distanse(PIN_ECHO_UP, PIN_TRIG_UP)) + ",";
+  data_to_serial += String(totalWater) + ",";
+  data_to_serial += String(flowRate) + ",";
+  data_to_serial += String(!waterLevelEmpty ? "high" : "low") + ",";
+  data_to_serial += String(waterLevelFull ? "high" : "low");
+  Serial.println(data_to_serial);
+
   }
 
-  delay(100); // Задержка для стабильности
+  delay(200); // Задержка для стабильности
 }

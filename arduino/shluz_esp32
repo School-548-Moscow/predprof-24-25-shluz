@@ -1,6 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
-#include <Servo.h>
+#include <ESP32Servo.h> // Используем ESP32Servo вместо Servo
 
 // Настройки точки доступа
 const char* ssid = "shluz_web";

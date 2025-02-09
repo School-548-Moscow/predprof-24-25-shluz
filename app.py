@@ -43,9 +43,9 @@ def index():
 def get_states():
     return jsonify(device_states)
 
-@app.route('/get_water_flow', methods=['GET'])
-def get_water_flow():
-    return jsonify(water_data)
+# @app.route('/get_water_flow', methods=['GET'])
+# def get_water_flow():
+#     return jsonify(water_data)
 
 @app.route('/update_state', methods=['POST'])
 def update_state():
@@ -79,51 +79,71 @@ def update_motor_state():
     else:
         return jsonify({"status": "error", "message": "Invalid motor or state"}), 400
 
-@app.route('/reset_water_counter', methods=['POST'])
-def reset_water_counter():
-    if arduino and arduino.is_open:
-        arduino.write(b"RESET_WATER\n")
-    water_data["total_water"] = 0.0
-    return jsonify(water_data)
-
-@app.route('/get_water_level', methods=['GET'])
-def get_water_level():
-    if arduino and arduino.is_open:
-        arduino.write(b"GET_WATER_LEVEL\n")
-        response = arduino.readline().decode().strip()
-        if response:
-            try:
-                empty_level, full_level = response.split(',')
-                device_states["water_level_empty"] = empty_level.lower()
-                device_states["water_level_full"] = full_level.lower()
-                return jsonify({"emptyLevel": empty_level.lower(), "fullLevel": full_level.lower()})
-            except ValueError:
-                print("Invalid water level data format:", response)
-    return jsonify({"emptyLevel": "low", "fullLevel": "low"})
-
-# Функция для обновления данных о расходе воды
-def update_water_data():
-    if arduino and arduino.is_open:
-        arduino.write(b"GET_WATER_DATA\n")
-        response = arduino.readline().decode().strip()
-        if response:
-            try:
-                total_water, flow_rate = map(float, response.split(','))
-                water_data["total_water"] = total_water
-                water_data["flow_rate"] = flow_rate
-                print(f"Water Data: Total = {total_water}, Flow Rate = {flow_rate}")
-            except ValueError:
-                print("Invalid water data format:", response)
-
+# @app.route('/reset_water_counter', methods=['POST'])
+# def reset_water_counter():
+#     if arduino and arduino.is_open:
+#         arduino.write(b"RESET_WATER\n")
+#     water_data["total_water"] = 0.0
+#     return jsonify(water_data)
+#
+# @app.route('/get_water_level', methods=['GET'])
+# def get_water_level():
+#     if arduino and arduino.is_open:
+#         arduino.write(b"GET_WATER_LEVEL\n")
+#         response = arduino.readline().decode().strip()
+#         print("Water level debug:", response)
+#         if response.find("GET_WATER_LEVEL") > -1:
+#             try:
+#                 empty_level, full_level = response.split(',')
+#                 device_states["water_level_empty"] = empty_level.lower()
+#                 device_states["water_level_full"] = full_level.lower()
+#                 return jsonify({"emptyLevel": empty_level.lower(), "fullLevel": full_level.lower()})
+#             except ValueError:
+#                 print("Invalid water level data format:", response)
+#     return jsonify({"emptyLevel": "low", "fullLevel": "low"})
+#
+# # Функция для обновления данных о расходе воды
+# def update_water_data():
+#     if arduino and arduino.is_open:
+#         arduino.write(b"GET_WATER_DATA\n")
+#         response = arduino.readline().decode().strip()
+#         print(response.split(','))
+#         if response.find("GET_WATER_DATA") > -1:
+#             try:
+#                 total_water, flow_rate = map(float, response.split(','))
+#                 water_data["total_water"] = total_water
+#                 water_data["flow_rate"] = flow_rate
+#                 print(f"Water Data: Total = {total_water}, Flow Rate = {flow_rate}")
+#             except ValueError:
+#                 print("Invalid water data format:", response)
 # Периодическое обновление данных о расходе воды
-def water_data_updater():
+
+# Функция для обновления данных
+def update_data():
+    if arduino and arduino.is_open:
+        response = arduino.readline().decode().strip()
+        try:
+            data = list(map(str, response.split(',')))
+            distanse_down = float(data[0])
+            distanse_middle = float(data[1])
+            distanse_up = float(data[2])
+            total_water = float(data[3])
+            flow_rate = float(data[4])
+            waterLevelEmpty = data[5]
+            waterLevelFull = data[6]
+            print(data, distanse_down, distanse_middle, distanse_up, total_water, flow_rate, waterLevelEmpty, waterLevelFull)
+        except ValueError:
+            print("Invalid water data format:    ", response)
+
+def data_updater():
     while True:
-        update_water_data()
+        # update_water_data()
+        update_data()
         time.sleep(1)
 
 if __name__ == '__main__':
     import threading
     # Запуск потока для обновления данных о расходе воды
-    threading.Thread(target=water_data_updater, daemon=True).start()
+    threading.Thread(target=data_updater, daemon=True).start()
     # Запуск Flask-приложения
     app.run(host='0.0.0.0', port=5000)
