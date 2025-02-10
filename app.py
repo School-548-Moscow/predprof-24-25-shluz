@@ -41,9 +41,24 @@ water_data = {
     "flow_rate": 0.0     # Скорость потока (литры/минуту)
 }
 
+# Переменная для хранения текущего режима
+mode_state = False  # По умолчанию ручной режим
+
+@app.route("/toggle_mode", methods=["POST"])
+def toggle_mode():
+    global mode_state
+    mode_state = not mode_state  # Переключаем состояние
+    # Отправляем новое состояние на Arduino
+    arduino.write(f"{int(mode_state)}\n".encode())
+    return jsonify({"mode_state": mode_state})
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', mode_state=mode_state)
+
+@app.route('/automatic')
+def automatic():
+    return render_template('automatic.html')
 
 @app.route('/get_states', methods=['GET'])
 def get_states():

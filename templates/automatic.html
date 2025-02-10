@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Автоматический режим - ШЛЮЗ №6</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 2.5em;
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .mode-selector {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .mode-selector a {
+            text-decoration: none;
+            color: #3498db;
+            font-size: 1.2em;
+            margin: 0 10px;
+        }
+        .mode-selector a:hover {
+            color: #2980b9;
+        }
+        .control-group {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .control-group h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #34495e;
+        }
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ccc;
+            transition: background 0.3s;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .status-indicator.green {
+            background: #27ae60;
+        }
+        .status-indicator.red {
+            background: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <h1>Автоматический режим - ШЛЮЗ №6</h1>
+    <div class="container">
+        <!-- Выбор режима -->
+        <div class="mode-selector">
+            <a href="index.html">Ручной режим</a>
+            <a href="automatic.html">Автоматический режим</a>
+            <button onclick="setMode('automatic')">Переключить в автоматический режим</button>
+        </div>
+
+        <!-- Информация о состоянии шлюза -->
+        <div class="control-group">
+            <h2>Состояние шлюза</h2>
+            <p>Уровень воды: <span id="water-level">—</span></p>
+            <p>Состояние ворот: <span id="gate-status">—</span></p>
+            <p>Состояние насосов: <span id="pump-status">—</span></p>
+        </div>
+
+        <!-- Логи автоматического режима -->
+        <div class="control-group">
+            <h2>Логи автоматического режима</h2>
+            <div id="automatic-logs"></div>
+        </div>
+    </div>
+
+    <script>
+        // Функция выбора режима работы шлюза
+        function setMode(mode) {
+            fetch('/set_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ mode: mode }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Функция для обновления состояния шлюза
+        function updateStatus(data) {
+            document.getElementById('water-level').textContent = data.waterLevelFull ? "Полный" : "Пустой";
+            document.getElementById('gate-status').textContent = data.servo2_3 ? "Открыты" : "Закрыты";
+            document.getElementById('pump-status').textContent = data.pumpState ? "Включены" : "Выключены";
+        }
+
+        // Функция для добавления логов
+        function addLog(message) {
+            const logElement = document.createElement('p');
+            logElement.textContent = message;
+            document.getElementById('automatic-logs').appendChild(logElement);
+        }
+
+        // Периодическое обновление данных
+        setInterval(() => {
+            fetch('/update_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateStatus(data);
+                addLog(`Обновление: ${new Date().toLocaleTimeString()}`);
+            })
+            .catch(error => console.error('Error:', error));
+        }, 1000); // Обновление каждую секунду
+    </script>
+</body>
+</html>

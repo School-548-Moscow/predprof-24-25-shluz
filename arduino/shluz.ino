@@ -8,10 +8,10 @@ Servo servo3;
 Servo servo4;
 
 // Параметры для драйверов двигателей L9110S
-int motor1Pin1 = 8;
-int motor1Pin2 = 9;
-int motor2Pin1 = 10;
-int motor2Pin2 = 11;
+int motor1Pin1 = A15;
+int motor1Pin2 = A14;
+int motor2Pin1 = A13;
+int motor2Pin2 = A12;
 int motor3Pin1 = A1;
 int motor3Pin2 = A2;
 int motor4Pin1 = A3;
@@ -36,12 +36,15 @@ int led2RedPin = A10;
 int led2GreenPin = A11;
 
 // Управление моторами через L298N
-int motor1EnablePin = 44;  // ВКЛ/ВЫКЛ 1 мотор
-int motor1PinA = 24;       // Управление 1 мотором
-int motor1PinB = 26;       // Управление 1 мотором
-int motor2EnablePin = 45;  // ВКЛ/ВЫКЛ 2 мотор
-int motor2PinA = 28;       // Управление 2 мотором
-int motor2PinB = 30;       // Управление 2 мотором
+//int motor1EnablePin = 44;  // ВКЛ/ВЫКЛ 1 мотор
+//int motor1PinA = 24;       // Управление 1 мотором
+//int motor1PinB = 26;       // Управление 1 мотором
+//int motor2EnablePin = 45;  // ВКЛ/ВЫКЛ 2 мотор
+//int motor2PinA = 28;       // Управление 2 мотором
+//int motor2PinB = 30;       // Управление 2 мотором
+
+int motor1RelayPin = 44;  // ВКЛ/ВЫКЛ 1 мотор
+int motor2RelayPin = 45;  // ВКЛ/ВЫКЛ 2 мотор
 
 // Управление помпой
 int pumpPin = 32;
@@ -64,6 +67,7 @@ bool led2State = false;      // false - выключен, true - включен
 int motor1Speed = 0;         // Скорость мотора 1 (0-255)
 int motor2Speed = 0;         // Скорость мотора 2 (0-255)
 bool pumpState = false;      // Состояние помпы
+bool modeState = false;      // Режим работы шлюза. false - ручной, true - автоматический
 
 // Функция для управления сервоприводами
 void controlServos(bool open2_3, bool open4_5) {
@@ -131,25 +135,25 @@ void controlLEDs(bool led1On, bool led2On) {
 }
 
 // Функция для управления моторами через L298N
-void controlL298N(bool motor1On, bool motor2On) {
-  // Управление мотором 1
-  if (motor1On) {
-    digitalWrite(motor1PinA, HIGH);
-    digitalWrite(motor1PinB, LOW);
-    analogWrite(motor1EnablePin, 255); // Полная скорость
-  } else {
-    digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
-  }
-
-  // Управление мотором 2
-  if (motor2On) {
-    digitalWrite(motor2PinA, HIGH);
-    digitalWrite(motor2PinB, LOW);
-    analogWrite(motor2EnablePin, 255); // Полная скорость
-  } else {
-    digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
-  }
-}
+//void controlL298N(bool motor1On, bool motor2On) {
+//  // Управление мотором 1
+//  if (motor1On) {
+//    digitalWrite(motor1PinA, HIGH);
+//    digitalWrite(motor1PinB, LOW);
+//    analogWrite(motor1EnablePin, 255); // Полная скорость
+//  } else {
+//    digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
+//  }
+//
+//  // Управление мотором 2
+//  if (motor2On) {
+//    digitalWrite(motor2PinA, HIGH);
+//    digitalWrite(motor2PinB, LOW);
+//    analogWrite(motor2EnablePin, 255); // Полная скорость
+//  } else {
+//    digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
+//  }
+//}
 
 // Функция для управления помпой
 void controlPump(bool state) {
@@ -175,6 +179,8 @@ void pulseCounter() {
   pulseCount++;
 }
 
+String currentMode = "manual";  // По умолчанию ручной режим
+
 void setup() {
   // Инициализация сервоприводов
   servo1.attach(2);
@@ -199,12 +205,15 @@ void setup() {
   pinMode(led2GreenPin, OUTPUT);
 
   // Инициализация моторов через L298N
-  pinMode(motor1EnablePin, OUTPUT);
-  pinMode(motor1PinA, OUTPUT);
-  pinMode(motor1PinB, OUTPUT);
-  pinMode(motor2EnablePin, OUTPUT);
-  pinMode(motor2PinA, OUTPUT);
-  pinMode(motor2PinB, OUTPUT);
+//  pinMode(motor1EnablePin, OUTPUT);
+//  pinMode(motor1PinA, OUTPUT);
+//  pinMode(motor1PinB, OUTPUT);
+//  pinMode(motor2EnablePin, OUTPUT);
+//  pinMode(motor2PinA, OUTPUT);
+//  pinMode(motor2PinB, OUTPUT);
+  // Инициализация реле
+  pinMode(motor1RelayPin, OUTPUT);
+  pinMode(motor2RelayPin, OUTPUT);
 
   // Инициализация помпы
   pinMode(pumpPin, OUTPUT);
@@ -227,6 +236,9 @@ void setup() {
 
   // Инициализация Serial
   Serial.begin(115200);
+
+  digitalWrite(motor1RelayPin, HIGH);
+  digitalWrite(motor2RelayPin, HIGH);
 }
 
 void full_shluz() {
@@ -286,9 +298,16 @@ void loop() {
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-
+    // Выбор режима работы
+    if (command == "MODE_STATE_FALSE") {
+      modeState = false;
+      Serial.println("MODE: HAND");
+    } else if (command == "MODE_STATE_TRUE") {
+      modeState = true;
+      Serial.println("MODE: AUTO");
+    }
     // Управление моторами A1,A2 и A3,A4
-    if (command == "MOTORA1A2_UP") {
+      else if (command == "MOTORA1A2_UP") {
       motorA1A2State = 1;
       Serial.println("MOTORA1A2: UP");
     } else if (command == "MOTORA1A2_DOWN") {
@@ -345,17 +364,31 @@ void loop() {
     }
 
     // Обработка команд для управления моторами
-    else if (command == "MOTOR1_ON") {
-      motor1Speed = 255; // Включить мотор 1
+//    else if (command == "MOTOR1_ON") {
+//      motor1Speed = 255; // Включить мотор 1
+//      Serial.println("MOTOR1: ON");
+//    } else if (command == "MOTOR1_OFF") {
+//      motor1Speed = 0; // Выключить мотор 1
+//      Serial.println("MOTOR1: OFF");
+//    } else if (command == "MOTOR2_ON") {
+//      motor2Speed = 255; // Включить мотор 2
+//      Serial.println("MOTOR2: ON");
+//    } else if (command == "MOTOR2_OFF") {
+//      motor2Speed = 0; // Выключить мотор 2
+//      Serial.println("MOTOR2: OFF");
+//    }
+
+      else if (command == "MOTOR1_ON") {
+      digitalWrite(motor1RelayPin, LOW); // Включить мотор 1
       Serial.println("MOTOR1: ON");
     } else if (command == "MOTOR1_OFF") {
-      motor1Speed = 0; // Выключить мотор 1
+      digitalWrite(motor1RelayPin, HIGH); // Выключить мотор 1
       Serial.println("MOTOR1: OFF");
     } else if (command == "MOTOR2_ON") {
-      motor2Speed = 255; // Включить мотор 2
+      digitalWrite(motor2RelayPin, LOW);; // Включить мотор 2
       Serial.println("MOTOR2: ON");
     } else if (command == "MOTOR2_OFF") {
-      motor2Speed = 0; // Выключить мотор 2
+      digitalWrite(motor2RelayPin, HIGH); // Выключить мотор 2
       Serial.println("MOTOR2: OFF");
     }
 
@@ -376,7 +409,7 @@ void loop() {
   controlPump(pumpState);
 
   // Управление моторами
-  controlL298N(motor1Speed > 0, motor2Speed > 0);
+  //controlL298N(motor1Speed > 0, motor2Speed > 0);
 
   // Обработка сигналов с датчиков уровня воды
   waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
@@ -404,9 +437,11 @@ void loop() {
   delay(100);
   Serial.println(data_to_serial);
 
-  if (distanse(PIN_ECHO_UP, PIN_TRIG_UP) < 10.0) {
-    full_shluz();
-  }
+//  if (modeState){
+//    if (distanse(PIN_ECHO_UP, PIN_TRIG_UP) < 10.0) {
+//    full_shluz();
+//    }
+//  }
 
   delay(500); // Задержка для стабильности
 }
