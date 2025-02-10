@@ -1,0 +1,760 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ESP32Servo.h> // Используем ESP32Servo вместо Servo
+
+// Настройки точки доступа
+const char* ssid = "shluz_web";
+const char* password = "12344321";
+
+WebServer server(80);
+
+// Инициализация сервоприводов
+Servo servo1;
+Servo servo2;
+Servo servo3;
+Servo servo4;
+
+// Параметры для драйверов двигателей L9110S
+int motorA1Pin = 13;
+int motorA2Pin = 14;
+int motorB1Pin = 15;
+int motorB2Pin = 16;
+
+// Датчики уровня воды
+const uint8_t pinSensorEmpty = 22; // Пин для датчика "Пустой шлюз"
+const uint8_t pinSensorFull = 23;  // Пин для датчика "Полный шлюз"
+bool waterLevelEmpty = false;      // Состояние уровня воды "Пустой шлюз"
+bool waterLevelFull = false;       // Состояние уровня воды "Полный шлюз"
+
+// Датчик расхода воды
+int flowSensorPin = 25;
+volatile long pulseCount = 0;
+float flowRate = 0.0;
+float totalWater = 0.0;
+
+// Светодиоды
+int led1RedPin = 17;
+int led1GreenPin = 18;
+int led2RedPin = 19;
+int led2GreenPin = 21;
+
+// Управление моторами через L298N
+int motor1EnablePin = 27;  // ВКЛ/ВЫКЛ 1 мотор
+int motor1PinA = 32;       // Управление 1 мотором
+int motor1PinB = 33;       // Управление 1 мотором
+int motor2EnablePin = 34;  // ВКЛ/ВЫКЛ 2 мотор
+int motor2PinA = 35;       // Управление 2 мотором
+int motor2PinB = 36;       // Управление 2 мотором
+
+// Управление помпой
+int pumpPin = 26;
+
+// Состояния устройств
+int motorA1A2State = 0; // 1 - верх, 2 - низ, 0 - стоп
+int motor8_11State = 0; // 1 - верх, 2 - низ, 0 - стоп
+bool servo2_3State = false;  // false - закрыто, true - открыто
+bool servo4_5State = false;  // false - закрыто, true - открыто
+bool led1State = false;      // false - выключен, true - включен
+bool led2State = false;      // false - выключен, true - включен
+int motor1Speed = 0;         // Скорость мотора 1 (0-255)
+int motor2Speed = 0;         // Скорость мотора 2 (0-255)
+bool pumpState = false;      // Состояние помпы
+
+// Функция для управления сервоприводами
+void controlServos(bool open2_3, bool open4_5) {
+  if (open2_3) {
+    servo1.write(-5); // Открыто
+    servo2.write(93);
+  } else {
+    servo2.write(-5);
+    delay(100);
+    servo1.write(93); // Закрыто
+  }
+
+  if (open4_5) {
+    servo3.write(-5); // Открыто
+    servo4.write(93);
+  } else {
+    servo3.write(93); // Закрыто
+    servo4.write(-5);
+  }
+}
+
+// Функция для управления моторами
+void controlMotors(int motorA1A2Up, int motor8_11Up) {
+  if (motorA1A2Up == 1) {
+    digitalWrite(motorA1Pin, HIGH); // Верх
+    digitalWrite(motorA2Pin, LOW);
+  } else if (motorA1A2Up == 2) {
+    digitalWrite(motorA1Pin, LOW); // вниз
+    digitalWrite(motorA2Pin, HIGH);
+  } else if (motorA1A2Up == 0) {
+    digitalWrite(motorA1Pin, LOW); // стоп
+    digitalWrite(motorA2Pin, LOW);
+  }
+
+  if (motor8_11Up == 1) {
+    digitalWrite(motorB1Pin, HIGH); // Верх
+    digitalWrite(motorB2Pin, LOW);
+  } else if (motor8_11Up == 2) {
+    digitalWrite(motorB1Pin, LOW); // вниз
+    digitalWrite(motorB2Pin, HIGH);
+  } else if (motor8_11Up == 0) {
+    digitalWrite(motorB1Pin, LOW); // стоп
+    digitalWrite(motorB2Pin, LOW);
+  }
+}
+
+// Функция для управления светодиодами
+void controlLEDs(bool led1On, bool led2On) {
+  digitalWrite(led1RedPin, led1On ? HIGH : LOW);
+  digitalWrite(led1GreenPin, led1On ? LOW : HIGH);
+  digitalWrite(led2RedPin, led2On ? HIGH : LOW);
+  digitalWrite(led2GreenPin, led2On ? LOW : HIGH);
+}
+
+// Функция для управления моторами через L298N
+void controlL298N(bool motor1On, bool motor2On) {
+  // Управление мотором 1
+  if (motor1On) {
+    digitalWrite(motor1PinA, HIGH);
+    digitalWrite(motor1PinB, LOW);
+    analogWrite(motor1EnablePin, 255); // Полная скорость
+  } else {
+    digitalWrite(motor1EnablePin, LOW); // Остановка мотора 1
+  }
+
+  // Управление мотором 2
+  if (motor2On) {
+    digitalWrite(motor2PinA, HIGH);
+    digitalWrite(motor2PinB, LOW);
+    analogWrite(motor2EnablePin, 255); // Полная скорость
+  } else {
+    digitalWrite(motor2EnablePin, LOW); // Остановка мотора 2
+  }
+}
+
+// Функция для управления помпой
+void controlPump(bool state) {
+  digitalWrite(pumpPin, state ? HIGH : LOW);
+}
+
+// Функция для обработки прерываний от датчика расхода воды
+void pulseCounter() {
+  pulseCount++;
+}
+
+// Функция для отправки HTML-страницы
+void handleRoot() {
+  String html = R"=====(
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система мониторинга и управления ШЛЮЗОМ №6</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 2.5em;
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .control-group {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .control-group h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #34495e;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 4px;
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ccc;
+            transition: background 0.3s;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .status-indicator.green {
+            background: #27ae60;
+        }
+        .status-indicator.red {
+            background: #e74c3c;
+        }
+        .water-flow {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .water-flow h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+            color: #34495e;
+        }
+        .water-flow p {
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+        .water-flow button {
+            background-color: #2ecc71;
+        }
+        .water-flow button:hover {
+            background-color: #27ae60;
+        }
+        .row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .column {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <h1>Система мониторинга и управления ШЛЮЗОМ №6</h1>
+    <div class="container">
+        <!-- Первый горизонтальный блок: Защита верхний бьеф и Защита нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Защита верхний бьеф</h2>
+                    <button onclick="updateState('motorA1A2', 'up')">Вверх</button>
+                    <button onclick="updateState('motorA1A2', 'down')">Вниз</button>
+                    <button onclick="updateState('motorA1A2', 'stop')">Стоп</button>
+                    <div id="motorA1A2-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Защита нижний бьеф</h2>
+                    <button onclick="updateState('motor8_11', 'up')">Вверх</button>
+                    <button onclick="updateState('motor8_11', 'down')">Вниз</button>
+                    <button onclick="updateState('motor8_11', 'stop')">Стоп</button>
+                    <div id="motor8_11-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Второй горизонтальный блок: Светофор верхний бьеф, Ворота верхний бьеф, Светофор шлюз, Ворота нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Светофор верхний бьеф</h2>
+                    <button onclick="updateState('led1', 'on')">Включить</button>
+                    <button onclick="updateState('led1', 'off')">Выключить</button>
+                    <div id="led1-indicator" class="status-indicator"></div>
+                </div>
+                <div class="control-group">
+                    <h2>Ворота верхний бьеф</h2>
+                    <button onclick="updateState('servo2_3', 'open')">Открыть</button>
+                    <button onclick="updateState('servo2_3', 'close')">Закрыть</button>
+                    <div id="servo2_3-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Светофор шлюз</h2>
+                    <button onclick="updateState('led2', 'on')">Включить</button>
+                    <button onclick="updateState('led2', 'off')">Выключить</button>
+                    <div id="led2-indicator" class="status-indicator"></div>
+                </div>
+                <div class="control-group">
+                    <h2>Ворота нижний бьеф</h2>
+                    <button onclick="updateState('servo4_5', 'open')">Открыть</button>
+                    <button onclick="updateState('servo4_5', 'close')">Закрыть</button>
+                    <div id="servo4_5-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Третий горизонтальный блок: Насос Верхний бьеф и Насос Нижний бьеф -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Насос Верхний бьеф</h2>
+                    <button onclick="updateMotorState('motor2', 'on')">ВКЛ</button>
+                    <button onclick="updateMotorState('motor2', 'off')">ВЫКЛ</button>
+                    <div id="motor2-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Насос Нижний бьеф</h2>
+                    <button onclick="updateMotorState('motor1', 'on')">ВКЛ</button>
+                    <button onclick="updateMotorState('motor1', 'off')">ВЫКЛ</button>
+                    <div id="motor1-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Четвертый горизонтальный блок: Датчик уровня воды "Пустой шлюз" и "Полный шлюз" -->
+        <div class="row">
+            <div class="column">
+                <div class="control-group">
+                    <h2>Датчик уровня воды: Пустой шлюз</h2>
+                    <div id="water-level-empty-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="control-group">
+                    <h2>Датчик уровня воды: Полный шлюз</h2>
+                    <div id="water-level-full-indicator" class="status-indicator"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Управление помпой -->
+        <div class="control-group">
+            <h2>Управление помпой</h2>
+            <button onclick="updateState('pump', 'on')">Включить</button>
+            <button onclick="updateState('pump', 'off')">Выключить</button>
+            <div id="pump-indicator" class="status-indicator"></div>
+        </div>
+
+        <!-- Счетчик расхода воды -->
+        <div class="water-flow">
+            <h2>Расход воды</h2>
+            <p>Общий расход: <span id="total-water">0.00</span> литров</p>
+            <p>Скорость потока: <span id="flow-rate">0.00</span> литров/мин</p>
+            <button onclick="resetWaterCounter()">Сбросить счетчик</button>
+        </div>
+    </div>
+
+    <script>
+        // Функция для обновления индикаторов
+        function updateIndicators(states) {
+            // Моторы
+            document.getElementById('motorA1A2-indicator').className =
+                `status-indicator ${states.motorA1A2 === 'up' ? 'green' : states.motorA1A2 === 'down' ? 'green' : 'red'}`;
+            document.getElementById('motor8_11-indicator').className =
+                `status-indicator ${states.motor8_11 === 'up' ? 'green' : states.motor8_11 === 'down' ? 'green' : 'red'}`;
+
+            // Сервоприводы
+            document.getElementById('servo2_3-indicator').className =
+                `status-indicator ${states.servo2_3 === 'open' ? 'green' : 'red'}`;
+            document.getElementById('servo4_5-indicator').className =
+                `status-indicator ${states.servo4_5 === 'open' ? 'green' : 'red'}`;
+
+            // Светодиоды
+            document.getElementById('led1-indicator').className =
+                `status-indicator ${states.led1 === 'on' ? 'green' : 'red'}`;
+            document.getElementById('led2-indicator').className =
+                `status-indicator ${states.led2 === 'on' ? 'green' : 'red'}`;
+
+            // Индикатор уровня воды
+            document.getElementById('water-level-empty-indicator').className =
+                `status-indicator ${states.waterLevelEmpty === 'high' ? 'red' : 'green'}`;
+            document.getElementById('water-level-full-indicator').className =
+                `status-indicator ${states.waterLevelFull === 'high' ? 'red' : 'green'}`;
+
+            // Помпа
+            document.getElementById('pump-indicator').className =
+                `status-indicator ${states.pump === 'on' ? 'green' : 'red'}`;
+
+            // Мотор 1
+            document.getElementById('motor1-indicator').className =
+                `status-indicator ${states.motor1 === 'on' ? 'green' : 'red'}`;
+
+            // Мотор 2
+            document.getElementById('motor2-indicator').className =
+                `status-indicator ${states.motor2 === 'on' ? 'green' : 'red'}`;
+        }
+
+        // Функция для обновления данных о расходе воды
+        function updateWaterFlow(data) {
+            document.getElementById('total-water').textContent = data.total_water.toFixed(2);
+            document.getElementById('flow-rate').textContent = data.flow_rate.toFixed(2);
+        }
+
+        // Функция для сброса счетчика воды
+        function resetWaterCounter() {
+            fetch('/reset_water_counter', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    updateWaterFlow(data);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Функция для отправки команд
+        function updateState(device, state) {
+            fetch('/update_state', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ device, state }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Обновляем индикаторы после успешного запроса
+                fetch('/get_states')
+                    .then(response => response.json())
+                    .then(states => updateIndicators(states));
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Функция для обновления состояния моторов
+        function updateMotorState(motor, state) {
+            fetch('/update_motor_state', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ motor, state }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Обновляем индикаторы после успешного запроса
+                fetch('/get_states')
+                    .then(response => response.json())
+                    .then(states => updateIndicators(states));
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Загрузка начальных состояний
+        fetch('/get_states')
+            .then(response => response.json())
+            .then(states => updateIndicators(states))
+            .catch(error => console.error('Error:', error));
+
+        // Периодическое обновление данных
+        setInterval(() => {
+            fetch('/get_water_flow')
+                .then(response => response.json())
+                .then(data => {
+                    updateWaterFlow(data);
+                })
+                .catch(error => console.error('Error:', error));
+
+            fetch('/get_water_level')
+                .then(response => response.json())
+                .then(data => {
+                    updateIndicators(data);
+                })
+                .catch(error => console.error('Error:', error));
+
+            fetch('/get_states')
+                .then(response => response.json())
+                .then(states => {
+                    updateIndicators(states);
+                })
+                .catch(error => console.error('Error:', error));
+        }, 1000); // Обновление каждую секунду
+    </script>
+</body>
+</html>
+)=====";
+  server.send(200, "text/html", html);
+}
+
+// Обработчики для команд
+void handleMotorA1A2Up() {
+  motorA1A2State = 1;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor A1A2 Up");
+}
+
+void handleMotorA1A2Down() {
+  motorA1A2State = 2;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor A1A2 Down");
+}
+
+void handleMotorA1A2Stop() {
+  motorA1A2State = 0;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor A1A2 Stop");
+}
+
+void handleMotor8_11Up() {
+  motor8_11State = 1;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor 8_11 Up");
+}
+
+void handleMotor8_11Down() {
+  motor8_11State = 2;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor 8_11 Down");
+}
+
+void handleMotor8_11Stop() {
+  motor8_11State = 0;
+  controlMotors(motorA1A2State, motor8_11State);
+  server.send(200, "text/plain", "Motor 8_11 Stop");
+}
+
+void handleServo2_3Open() {
+  servo2_3State = true;
+  controlServos(servo2_3State, servo4_5State);
+  server.send(200, "text/plain", "Servo 2_3 Open");
+}
+
+void handleServo2_3Close() {
+  servo2_3State = false;
+  controlServos(servo2_3State, servo4_5State);
+  server.send(200, "text/plain", "Servo 2_3 Close");
+}
+
+void handleServo4_5Open() {
+  servo4_5State = true;
+  controlServos(servo2_3State, servo4_5State);
+  server.send(200, "text/plain", "Servo 4_5 Open");
+}
+
+void handleServo4_5Close() {
+  servo4_5State = false;
+  controlServos(servo2_3State, servo4_5State);
+  server.send(200, "text/plain", "Servo 4_5 Close");
+}
+
+void handleLED1On() {
+  led1State = true;
+  controlLEDs(led1State, led2State);
+  server.send(200, "text/plain", "LED 1 On");
+}
+
+void handleLED1Off() {
+  led1State = false;
+  controlLEDs(led1State, led2State);
+  server.send(200, "text/plain", "LED 1 Off");
+}
+
+void handleLED2On() {
+  led2State = true;
+  controlLEDs(led1State, led2State);
+  server.send(200, "text/plain", "LED 2 On");
+}
+
+void handleLED2Off() {
+  led2State = false;
+  controlLEDs(led1State, led2State);
+  server.send(200, "text/plain", "LED 2 Off");
+}
+
+void handleMotor1On() {
+  motor1Speed = 255;
+  controlL298N(motor1Speed > 0, motor2Speed > 0);
+  server.send(200, "text/plain", "Motor 1 On");
+}
+
+void handleMotor1Off() {
+  motor1Speed = 0;
+  controlL298N(motor1Speed > 0, motor2Speed > 0);
+  server.send(200, "text/plain", "Motor 1 Off");
+}
+
+void handleMotor2On() {
+  motor2Speed = 255;
+  controlL298N(motor1Speed > 0, motor2Speed > 0);
+  server.send(200, "text/plain", "Motor 2 On");
+}
+
+void handleMotor2Off() {
+  motor2Speed = 0;
+  controlL298N(motor1Speed > 0, motor2Speed > 0);
+  server.send(200, "text/plain", "Motor 2 Off");
+}
+
+void handlePumpOn() {
+  pumpState = true;
+  controlPump(pumpState);
+  server.send(200, "text/plain", "Pump On");
+}
+
+void handlePumpOff() {
+  pumpState = false;
+  controlPump(pumpState);
+  server.send(200, "text/plain", "Pump Off");
+}
+
+void handleResetWaterCounter() {
+  totalWater = 0.0;
+  flowRate = 0.0;
+  server.send(200, "text/plain", "Water counter reset");
+}
+
+void handleGetStates() {
+  String states = "{";
+  states += "\"motorA1A2\":\"" + String(motorA1A2State == 1 ? "up" : motorA1A2State == 2 ? "down" : "stop") + "\",";
+  states += "\"motor8_11\":\"" + String(motor8_11State == 1 ? "up" : motor8_11State == 2 ? "down" : "stop") + "\",";
+  states += "\"servo2_3\":\"" + String(servo2_3State ? "open" : "close") + "\",";
+  states += "\"servo4_5\":\"" + String(servo4_5State ? "open" : "close") + "\",";
+  states += "\"led1\":\"" + String(led1State ? "on" : "off") + "\",";
+  states += "\"led2\":\"" + String(led2State ? "on" : "off") + "\",";
+  states += "\"motor1\":\"" + String(motor1Speed > 0 ? "on" : "off") + "\",";
+  states += "\"motor2\":\"" + String(motor2Speed > 0 ? "on" : "off") + "\",";
+  states += "\"pump\":\"" + String(pumpState ? "on" : "off") + "\",";
+  states += "\"waterLevelEmpty\":\"" + String(waterLevelEmpty ? "high" : "low") + "\",";
+  states += "\"waterLevelFull\":\"" + String(waterLevelFull ? "high" : "low") + "\"";
+  states += "}";
+  server.send(200, "application/json", states);
+}
+
+void handleGetWaterFlow() {
+  String data = "{";
+  data += "\"total_water\":" + String(totalWater) + ",";
+  data += "\"flow_rate\":" + String(flowRate);
+  data += "}";
+  server.send(200, "application/json", data);
+}
+
+void handleGetWaterLevel() {
+  String data = "{";
+  data += "\"emptyLevel\":\"" + String(waterLevelEmpty ? "high" : "low") + "\",";
+  data += "\"fullLevel\":\"" + String(waterLevelFull ? "high" : "low") + "\"";
+  data += "}";
+  server.send(200, "application/json", data);
+}
+
+void setup() {
+  // Инициализация сервоприводов
+  servo1.attach(2);
+  servo2.attach(4);
+  servo3.attach(5);
+  servo4.attach(12);
+
+  // Инициализация моторов
+  pinMode(motorA1Pin, OUTPUT);
+  pinMode(motorA2Pin, OUTPUT);
+  pinMode(motorB1Pin, OUTPUT);
+  pinMode(motorB2Pin, OUTPUT);
+
+  // Инициализация светодиодов
+  pinMode(led1RedPin, OUTPUT);
+  pinMode(led1GreenPin, OUTPUT);
+  pinMode(led2RedPin, OUTPUT);
+  pinMode(led2GreenPin, OUTPUT);
+
+  // Инициализация моторов через L298N
+  pinMode(motor1EnablePin, OUTPUT);
+  pinMode(motor1PinA, OUTPUT);
+  pinMode(motor1PinB, OUTPUT);
+  pinMode(motor2EnablePin, OUTPUT);
+  pinMode(motor2PinA, OUTPUT);
+  pinMode(motor2PinB, OUTPUT);
+
+  // Инициализация помпы
+  pinMode(pumpPin, OUTPUT);
+
+  // Инициализация датчиков уровня воды
+  pinMode(pinSensorEmpty, INPUT_PULLUP);
+  pinMode(pinSensorFull, INPUT_PULLUP);
+
+  // Инициализация датчика расхода воды
+  pinMode(flowSensorPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
+
+  // Настройка точки доступа
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  // Настройка маршрутов веб-сервера
+  server.on("/", handleRoot);
+  server.on("/motorA1A2_up", handleMotorA1A2Up);
+  server.on("/motorA1A2_down", handleMotorA1A2Down);
+  server.on("/motorA1A2_stop", handleMotorA1A2Stop);
+  server.on("/motor8_11_up", handleMotor8_11Up);
+  server.on("/motor8_11_down", handleMotor8_11Down);
+  server.on("/motor8_11_stop", handleMotor8_11Stop);
+  server.on("/servo2_3_open", handleServo2_3Open);
+  server.on("/servo2_3_close", handleServo2_3Close);
+  server.on("/servo4_5_open", handleServo4_5Open);
+  server.on("/servo4_5_close", handleServo4_5Close);
+  server.on("/led1_on", handleLED1On);
+  server.on("/led1_off", handleLED1Off);
+  server.on("/led2_on", handleLED2On);
+  server.on("/led2_off", handleLED2Off);
+  server.on("/motor1_on", handleMotor1On);
+  server.on("/motor1_off", handleMotor1Off);
+  server.on("/motor2_on", handleMotor2On);
+  server.on("/motor2_off", handleMotor2Off);
+  server.on("/pump_on", handlePumpOn);
+  server.on("/pump_off", handlePumpOff);
+  server.on("/reset_water_counter", handleResetWaterCounter);
+  server.on("/get_states", handleGetStates);
+  server.on("/get_water_flow", handleGetWaterFlow);
+  server.on("/get_water_level", handleGetWaterLevel);
+
+  // Запуск веб-сервера
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void loop() {
+  // Обработка HTTP-запросов
+  server.handleClient();
+
+  // Обработка сигналов с датчиков уровня воды
+  waterLevelEmpty = !digitalRead(pinSensorEmpty); // Если уровень воды низкий, waterLevelEmpty = true
+  waterLevelFull = !digitalRead(pinSensorFull);   // Если уровень воды высокий, waterLevelFull = true
+
+  // Отправка состояния уровня воды в Serial
+  if (!waterLevelEmpty) {
+    Serial.println("WATER_LEVEL_EMPTY:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_EMPTY:LOW");
+  }
+
+  if (waterLevelFull) {
+    Serial.println("WATER_LEVEL_FULL:HIGH");
+  } else {
+    Serial.println("WATER_LEVEL_FULL:LOW");
+  }
+
+  // Обновление данных датчика каждую секунду
+  static unsigned long lastMeasurement = 0;
+  if (millis() - lastMeasurement >= 1000) {
+    detachInterrupt(digitalPinToInterrupt(flowSensorPin));
+    flowRate = pulseCount / 7.5f; // Для YF-S401: 7.5 импульсов/литр
+    totalWater += flowRate / 60;
+    pulseCount = 0;
+    lastMeasurement = millis();
+    attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulseCounter, FALLING);
+  }
+
+  delay(100); // Задержка для стабильности
+}
