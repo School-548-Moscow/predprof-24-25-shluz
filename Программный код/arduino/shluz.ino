@@ -162,7 +162,7 @@ void controlPump(bool state) {
 
 float distanse(int PIN_ECHO, int PIN_TRIG) {
   long duration, cm;
-
+  
   digitalWrite(PIN_TRIG, LOW);
   delayMicroseconds(5);
   digitalWrite(PIN_TRIG, HIGH);
@@ -433,7 +433,7 @@ void loop() {
   data_to_serial += String(flowRate) + ",";
   data_to_serial += String(!waterLevelEmpty ? "high" : "low") + ",";
   data_to_serial += String(waterLevelFull ? "high" : "low");
-
+  
   delay(100);
   Serial.println(data_to_serial);
 
